@@ -1,3 +1,108 @@
+exports.getLiveSummary = async (req, res) => {
+  try {
+    const swipes = await service.fetchLiveOccupancy();
+
+    // 1. TODAY’S HEADCOUNT: first swipe per person
+    const firstByPerson = {};
+    swipes.forEach(r => {
+      const prev = firstByPerson[r.PersonGUID];
+      const t = new Date(r.LocaleMessageTime).getTime();
+      if (!prev || t < new Date(prev.LocaleMessageTime).getTime()) {
+        firstByPerson[r.PersonGUID] = r;
+      }
+    });
+    const todayRecs = Object.values(firstByPerson);
+    const today = { total: 0, Employee: 0, Contractor: 0, TempBadge: 0 };
+    todayRecs.forEach(r => {
+      today.total++;
+      if (isTempBadgeType(r.PersonnelType)) today.TempBadge++;
+      else if (isEmployeeType(r.PersonnelType)) today.Employee++;
+      else today.Contractor++;
+    });
+
+    // 2. REAL-TIME: last swipe per person, with strict removal for Floor == "Out of office"
+    const lastByPerson = {};
+    swipes.forEach(r => {
+      const prev = lastByPerson[r.PersonGUID];
+      const t = new Date(r.LocaleMessageTime).getTime();
+      if (!prev || t > new Date(prev.LocaleMessageTime).getTime()) {
+        lastByPerson[r.PersonGUID] = r;
+      }
+    });
+
+    const realtime = {};
+    const unmappedDoors = new Set();
+
+    Object.values(lastByPerson).forEach(r => {
+      // Resolve mapped floor up-front (populates unmappedDoors when needed)
+      const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+      const floorNorm = rawFloor ? String(rawFloor).trim().toLowerCase() : '';
+
+      // STRICT RULE: if resolved Floor equals "out of office" -> skip counting entirely
+      if (floorNorm === 'out of office') {
+        return;
+      }
+
+      const p = r.PartitionName2;
+      // initialize, including TempBadge for CR
+      if (!realtime[p]) {
+        realtime[p] = { total: 0, Employee: 0, Contractor: 0 };
+        if (p === 'CR.Costa Rica Partition') realtime[p].TempBadge = 0;
+        realtime[p].floors = {};
+      }
+
+      realtime[p].total++;
+      if (isTempBadgeType(r.PersonnelType)) realtime[p].TempBadge++;
+      else if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+      else realtime[p].Contractor++;
+
+      // add to floor bucket, using 'Unmapped' when lookup fails
+      const normFloor = rawFloor ? String(rawFloor).trim() : 'Unmapped';
+      realtime[p].floors[normFloor] = (realtime[p].floors[normFloor] || 0) + 1;
+    });
+
+    if (unmappedDoors.size) {
+      console.warn('Unmapped doors:\n' + Array.from(unmappedDoors).join('\n'));
+    }
+
+    // Build enriched details with Floor added, but filter out any whose Floor is "Out of office"
+    const details = Object.values(lastByPerson)
+      .map(r => {
+        const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+        const floor = rawFloor ? String(rawFloor).trim() : null;
+        return {
+          ...r,
+          Floor: floor
+        };
+      })
+      .filter(d => {
+        const f = d.Floor;
+        return !(f && String(f).trim().toLowerCase() === 'out of office');
+      });
+
+    return res.json({
+      success: true,
+      today,
+      realtime,
+      details
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: 'Live summary failed' });
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
 Same Compare both Commented and UnCommented code and fix this issue carefully...
 
 http://localhost:3001/api/occupancy/live-summary

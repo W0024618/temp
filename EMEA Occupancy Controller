@@ -1,152 +1,3 @@
-exports.getLiveSummary = async (req, res) => {
-  try {
-    const swipes = await service.fetchLiveOccupancy();
-
-    // 1. TODAY’S HEADCOUNT: first swipe per person
-    const firstByPerson = {};
-    swipes.forEach(r => {
-      const prev = firstByPerson[r.PersonGUID];
-      const t = new Date(r.LocaleMessageTime).getTime();
-      if (!prev || t < new Date(prev.LocaleMessageTime).getTime()) {
-        firstByPerson[r.PersonGUID] = r;
-      }
-    });
-    const todayRecs = Object.values(firstByPerson);
-    const today = { total: 0, Employee: 0, Contractor: 0 };
-    todayRecs.forEach(r => {
-      today.total++;
-      if (isEmployeeType(r.PersonnelType)) today.Employee++;
-      else today.Contractor++;
-    });
-
-    // 2. REAL-TIME: last swipe per person
-    const lastByPerson = {};
-    swipes.forEach(r => {
-      const prev = lastByPerson[r.PersonGUID];
-      const t = new Date(r.LocaleMessageTime).getTime();
-      if (!prev || t > new Date(prev.LocaleMessageTime).getTime()) {
-        lastByPerson[r.PersonGUID] = r;
-      }
-    });
-
-    const realtime = {};
-    const unmappedDoors = new Set();
-
-    Object.values(lastByPerson).forEach(r => {
-      // Resolve floor up-front (this will also populate unmappedDoors if necessary)
-      const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
-      const floorNorm = rawFloor ? String(rawFloor).trim().toLowerCase() : '';
-
-      // STRICT RULE: if resolved Floor equals "Out of office" -> skip counting
-      if (floorNorm === 'out of office') {
-        return;
-      }
-
-      // Continue with existing OutDirection logic only if needed (original intent preserved)
-      // (Note: we already removed any record whose mapped floor is "Out of office" regardless of direction)
-
-      const p = r.PartitionName2;
-      if (!realtime[p]) {
-        realtime[p] = { total: 0, Employee: 0, Contractor: 0, floors: {} };
-      }
-
-      realtime[p].total++;
-      if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-      else realtime[p].Contractor++;
-
-      const normFloorLabel = rawFloor ? String(rawFloor).trim() : 'Unmapped';
-      realtime[p].floors[normFloorLabel] = (realtime[p].floors[normFloorLabel] || 0) + 1;
-    });
-
-    if (unmappedDoors.size) {
-      console.warn('Unmapped doors:\n' + Array.from(unmappedDoors).join('\n'));
-    }
-
-    // Build enriched details array, but filter out any whose resolved Floor is "Out of office"
-    const details = Object.values(lastByPerson)
-      .map(r => {
-        const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
-        const floor = rawFloor ? String(rawFloor).trim() : null;
-        return {
-          ...r,
-          Floor: floor
-        };
-      })
-      // Strictly remove records whose Floor is "Out of office"
-      .filter(d => {
-        const f = d.Floor;
-        return !(f && String(f).trim().toLowerCase() === 'out of office');
-      });
-
-    return res.json({
-      success: true,
-      today,
-      realtime,
-      details
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: 'Live summary failed' });
-  }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-let check below EAMA Occupancy Controller and fix this issue carefully..
-same Compare both comented and uncommented code and when  "Floor": "Out of office" then remove thier cpount and remove them from live summary carefully
-
-http://localhost:3005/api/occupancy/live-summary
-
- },
-  "details": [
-    {
-      "LocaleMessageTime": "2025-08-13T06:47:45.000Z",
-      "Dateonly": "2025-08-13",
-      "Swipe_Time": "06:47:45",
-      "EmployeeID": "86140423",
-      "PersonGUID": "7AF6EB75-1162-4A6B-B12C-C842DB112C90",
-      "ObjectName1": "Tomasevic, Kazimez",
-      "Door": "EMEA_LT_VNO_GAMA_1st Flr_Parking",
-      "PersonnelType": "Contractor",
-      "CardNumber": "619063",
-      "Text5": "Vilnius - Technopolis",
-      "PartitionName2": "LT.Vilnius",
-      "AdmitCode": "Admit",
-      "Direction": "OutDirection",
-      "Floor": "Out of office"
-    },
-    {
-      "LocaleMessageTime": "2025-08-13T00:00:59.000Z",
-      "Dateonly": "2025-08-13",
-      "Swipe_Time": "00:00:59",
-      "EmployeeID": "325026",
-      "PersonGUID": "4BEBC337-185E-46C7-8EEB-DAE533F71577",
-      "ObjectName1": "Atkocius, Karolis",
-      "Door": "EMEA_LT_VNO_GAMA_EMEA_5th Flr_Stairway",
-      "PersonnelType": "Employee",
-      "CardNumber": "234189",
-      "Text5": "Vilnius - Gama Business Center",
-      "PartitionName2": "LT.Vilnius",
-      "AdmitCode": "Admit",
-      "Direction": "OutDirection",
-      "Floor": "Out of office"
-    },
-    {
-
-
-
-
-
 // C:\Users\W0024618\Desktop\emea-occupancy-backend\src\controllers\occupancy.controller.js
 
 const service = require('../services/occupancy.service');
@@ -292,7 +143,6 @@ exports.getLiveOccupancy = async (req, res) => {
 
 
 
-
 exports.getLiveSummary = async (req, res) => {
   try {
     const swipes = await service.fetchLiveOccupancy();
@@ -314,7 +164,7 @@ exports.getLiveSummary = async (req, res) => {
       else today.Contractor++;
     });
 
-    // 2. REAL-TIME: last swipe per person (we keep your OutDirection eviction logic)
+    // 2. REAL-TIME: last swipe per person
     const lastByPerson = {};
     swipes.forEach(r => {
       const prev = lastByPerson[r.PersonGUID];
@@ -328,15 +178,17 @@ exports.getLiveSummary = async (req, res) => {
     const unmappedDoors = new Set();
 
     Object.values(lastByPerson).forEach(r => {
-      // Only evict when the mapped outDirection floor equals "Out of office"
-      if (r.Direction === 'OutDirection') {
-        const floorCheck = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
-        const fcNorm = floorCheck ? String(floorCheck).trim().toLowerCase() : '';
-        if (fcNorm === 'out of office') {
-          return; // true exit -> don't count
-        }
-        // otherwise fall through and count
+      // Resolve floor up-front (this will also populate unmappedDoors if necessary)
+      const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+      const floorNorm = rawFloor ? String(rawFloor).trim().toLowerCase() : '';
+
+      // STRICT RULE: if resolved Floor equals "Out of office" -> skip counting
+      if (floorNorm === 'out of office') {
+        return;
       }
+
+      // Continue with existing OutDirection logic only if needed (original intent preserved)
+      // (Note: we already removed any record whose mapped floor is "Out of office" regardless of direction)
 
       const p = r.PartitionName2;
       if (!realtime[p]) {
@@ -347,26 +199,29 @@ exports.getLiveSummary = async (req, res) => {
       if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
       else realtime[p].Contractor++;
 
-      const rawFloor = lookupFloor(p, r.Door, r.Direction, unmappedDoors);
-      const normFloor = rawFloor ? String(rawFloor).trim() : 'Unmapped';
-      realtime[p].floors[normFloor] = (realtime[p].floors[normFloor] || 0) + 1;
+      const normFloorLabel = rawFloor ? String(rawFloor).trim() : 'Unmapped';
+      realtime[p].floors[normFloorLabel] = (realtime[p].floors[normFloorLabel] || 0) + 1;
     });
 
     if (unmappedDoors.size) {
       console.warn('Unmapped doors:\n' + Array.from(unmappedDoors).join('\n'));
     }
 
-    // Build enriched details array and attach Floor directly below PartitionName2 in each object
-    const details = Object.values(lastByPerson).map(r => {
-      const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
-      const floor = rawFloor ? String(rawFloor).trim() : null;
-
-      // Return shape mirrors incoming record fields + Floor
-      return {
-        ...r,
-        Floor: floor
-      };
-    });
+    // Build enriched details array, but filter out any whose resolved Floor is "Out of office"
+    const details = Object.values(lastByPerson)
+      .map(r => {
+        const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+        const floor = rawFloor ? String(rawFloor).trim() : null;
+        return {
+          ...r,
+          Floor: floor
+        };
+      })
+      // Strictly remove records whose Floor is "Out of office"
+      .filter(d => {
+        const f = d.Floor;
+        return !(f && String(f).trim().toLowerCase() === 'out of office');
+      });
 
     return res.json({
       success: true,
@@ -380,4 +235,68 @@ exports.getLiveSummary = async (req, res) => {
   }
 };
 
+
+
+exports.getHistoricalOccupancy = async (req, res) => {
+  const location = req.params.location || null;
+  try {
+    const raw = await service.fetchHistoricalOccupancy(location);
+
+    // first swipe per person per date
+    const byDate = raw.reduce((acc, r) => {
+      const iso = (r.LocaleMessageTime instanceof Date)
+        ? r.LocaleMessageTime.toISOString()
+        : r.LocaleMessageTime;
+      const date = iso.slice(0,10);
+      acc[date] = acc[date] || {};
+      const prev = acc[date][r.PersonGUID];
+      if (!prev || new Date(iso) < new Date(prev.LocaleMessageTime)) {
+        acc[date][r.PersonGUID] = { ...r, LocaleMessageTime: iso };
+      }
+      return acc;
+    }, {});
+
+    const summaryByDate = [];
+    const details = [];
+
+    Object.keys(byDate).sort().forEach(date => {
+      const recs = Object.values(byDate[date]);
+      details.push(...recs);
+
+      // initialize counts
+      const regionCounts = { total: 0, Employee: 0, Contractor: 0 };
+      const partitionCounts = {};
+
+      recs.forEach(r => {
+        regionCounts.total++;
+        if (isEmployeeType(r.PersonnelType)) regionCounts.Employee++;
+        else regionCounts.Contractor++;
+
+        if (!location) {
+          const p = r.PartitionName2;
+          if (!partitionCounts[p]) {
+            partitionCounts[p] = { total: 0, Employee: 0, Contractor: 0 };
+          }
+          partitionCounts[p].total++;
+          if (isEmployeeType(r.PersonnelType)) partitionCounts[p].Employee++;
+          else partitionCounts[p].Contractor++;
+        }
+      });
+
+      summaryByDate.push({
+        date,
+        day: new Date(date).toLocaleDateString('en-US', { weekday:'long' }),
+        region: location
+          ? { name: location, ...regionCounts }
+          : { name: 'EMEA', ...regionCounts },
+        partitions: location ? undefined : partitionCounts
+      });
+    });
+
+    return res.json({ success: true, summaryByDate, details });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: 'Historical fetch failed' });
+  }
+};
 

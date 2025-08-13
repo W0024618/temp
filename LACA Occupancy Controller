@@ -1,0 +1,337 @@
+Same Compare both Commented and UnCommented code and fix this issue carefully...
+
+http://localhost:3001/api/occupancy/live-summary
+
+{
+  "success": true,
+  "today": {
+    "total": 7,
+    "Employee": 0,
+    "Contractor": 7,
+    "TempBadge": 0
+  },
+  "realtime": {
+    "CR.Costa Rica Partition": {
+      "total": 1,
+      "Employee": 0,
+      "Contractor": 1,
+      "TempBadge": 0,
+      "floors": {
+        "Building B1": 1
+      }
+    },
+    "AR.Cordoba": {
+      "total": 1,
+      "Employee": 0,
+      "Contractor": 1,
+      "floors": {
+        "5th Floor": 1
+      }
+    }
+  },
+  "details": [
+    {
+      "LocaleMessageTime": "2025-08-13T00:27:48.000Z",
+      "Dateonly": "2025-08-13",
+      "Swipe_Time": "00:27:48",
+      "EmployeeID": "W0013046",
+      "PersonGUID": "9EE15706-B3DE-451D-9B11-DE7E734E02C6",
+      "ObjectName1": "Mena, Evelyn",
+      "Door": "LACA CR E3 Main Lobby",
+      "PersonnelType": "Contractor",
+      "CardNumber": "613101",
+      "Text5": "Santa Ana - Parque Empresarial",
+      "PartitionName2": "CR.Costa Rica Partition",
+      "AdmitCode": "Admit",
+      "Direction": "OutDirection",
+      "Floor": "Out of office"
+    },
+    {
+      "LocaleMessageTime": "2025-08-13T00:29:40.000Z",
+      "Dateonly": "2025-08-13",
+      "Swipe_Time": "00:29:40",
+      "EmployeeID": "W0017751",
+      "PersonGUID": "6C15C9F1-55E9-4AD8-B7E3-AB826F986DA8",
+      "ObjectName1": "Cruz, Alisson",
+      "Door": "LACA CR E3 Main Lobby",
+      "PersonnelType": "Contractor",
+      "CardNumber": "613103",
+      "Text5": "Santa Ana - Parque Empresarial",
+      "PartitionName2": "CR.Costa Rica Partition",
+      "AdmitCode": "Admit",
+      "Direction": "OutDirection",
+      "Floor": "Out of office"
+    },
+    {
+      "LocaleMessageTime": "2025-08-13T01:15:32.000Z",
+      "Dateonly": "2025-08-13",
+      "Swipe_Time": "01:15:32",
+      "EmployeeID": "73432593",
+      "PersonGUID": "1EDE1199-D3A6-405E-B1D2-9BEBA4A73F63",
+      "ObjectName1": "Obando, Kevin",
+      "Door": "LACA CR B1 Main Lobby Door",
+      "PersonnelType": "Contractor",
+      "CardNumber": "612770",
+      "Text5": "Santa Ana - Parque Empresarial",
+      "PartitionName2": "CR.Costa Rica Partition",
+      "AdmitCode": "Admit",
+      "Direction": "InDirection",
+      "Floor": "Building B1"
+    },
+    {
+      "LocaleMessageTime": "2025-08-13T00:28:01.000Z",
+      "Dateonly": "2025-08-13",
+      "Swipe_Time": "00:28:01",
+      "EmployeeID": "W0024932",
+      "PersonGUID": "16C837CE-FBA4-4B66-AF32-1C96DF122222",
+      "ObjectName1": "Porras, Tirza",
+      "Door": "LACA CR E3 Main Lobby",
+      "PersonnelType": "Contractor",
+      "CardNumber": "613095",
+      "Text5": "Santa Ana - Parque Empresarial",
+      "PartitionName2": "CR.Costa Rica Partition",
+      "AdmitCode": "Admit",
+      "Direction": "OutDirection",
+      "Floor": "Out of office"
+    },
+
+
+
+Same "Floor": "Out of office" then remove from live summary 
+
+//C:\Users\W0024618\Desktop\laca-occupancy-backend\src\controllers\occupancy.controller.js
+
+
+const service = require('../services/occupancy.service');
+const doorMap = require('../utils/doorMap'); 
+
+
+
+exports.getLiveOccupancy = async (req, res) => {
+  try {
+    const data = await service.fetchLiveOccupancy();
+    res.json({ success: true, count: data.length, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Live occupancy fetch failed' });
+  }
+};
+
+
+/**
+ * Returns true if this PersonnelType counts as Employee.
+ * Everything else (including blank) counts as Contractor.
+ */
+
+function isEmployeeType(pt) {
+  return pt === 'Employee'
+      || pt === 'Terminated Employee'
+      || pt === 'Terminated Personnel';
+}
+
+/**
+ * Returns true if this PersonnelType is a Temp Badge.
+ */
+// function isTempBadgeType(pt) {
+//   return pt === 'Temp Badge';
+// }
+
+
+function isTempBadgeType(pt) {
+  // handle both variants from the database
+  return pt === 'Temp Badge' || pt === 'TempBadge';
+}
+
+
+
+/**
+ * Look up floor for a given record by matching door + partition.
+ */
+function lookupFloor(partition, door, direction, unmappedSet) {
+  const entry = doorMap.find(d =>
+    d.partition === partition && d.door === door
+  );
+  if (!entry) {
+    unmappedSet.add(`${partition} | ${door}`);
+    return null;
+  }
+  return direction === 'InDirection'
+    ? entry.inDirectionFloor
+    : entry.outDirectionFloor;
+}
+
+
+
+
+// exports.getLiveSummary = async (req, res) => {
+//   try {
+//     const swipes = await service.fetchLiveOccupancy();
+
+//     // 1. TODAY’S HEADCOUNT: first swipe per person
+//     const firstByPerson = {};
+//     swipes.forEach(r => {
+//       const prev = firstByPerson[r.PersonGUID];
+//       const t = new Date(r.LocaleMessageTime).getTime();
+//       if (!prev || t < new Date(prev.LocaleMessageTime).getTime()) {
+//         firstByPerson[r.PersonGUID] = r;
+//       }
+//     });
+//     const todayRecs = Object.values(firstByPerson);
+//     const today = { total: 0, Employee: 0, Contractor: 0, TempBadge: 0 };
+//     todayRecs.forEach(r => {
+//       today.total++;
+//       if (isTempBadgeType(r.PersonnelType)) today.TempBadge++;
+//       else if (isEmployeeType(r.PersonnelType)) today.Employee++;
+//       else today.Contractor++;
+//     });
+
+//     // 2. REAL-TIME: last swipe per person, only InDirection
+//     const lastByPerson = {};
+//     swipes.forEach(r => {
+//       const prev = lastByPerson[r.PersonGUID];
+//       const t = new Date(r.LocaleMessageTime).getTime();
+//       if (!prev || t > new Date(prev.LocaleMessageTime).getTime()) {
+//         lastByPerson[r.PersonGUID] = r;
+//       }
+//     });
+
+//     const realtime = {};
+//     const unmappedDoors = new Set();
+//     Object.values(lastByPerson).forEach(r => {
+//       // if (r.Direction !== 'InDirection') return;
+//      // ● only remove if this door truly maps to "Out of office"
+//      if (r.Direction === 'OutDirection') {
+//        const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+//        if (floor === 'Out of office' || floor?.trim() === 'Out of office') {
+//          return; // true exit → evict
+//        }
+//        // otherwise fall through and count them
+//      }
+
+
+//       const p = r.PartitionName2;
+//       // initialize, including TempBadge for CR
+//       if (!realtime[p]) {
+//         realtime[p] = { total: 0, Employee: 0, Contractor: 0 };
+//         if (p === 'CR.Costa Rica Partition') realtime[p].TempBadge = 0;
+//         realtime[p].floors = {};
+//       }
+//       realtime[p].total++;
+//       if (isTempBadgeType(r.PersonnelType)) realtime[p].TempBadge++;
+//       else if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+//       else realtime[p].Contractor++;
+
+//       const floor = lookupFloor(p, r.Door, r.Direction, unmappedDoors) || 'Unmapped';
+//       realtime[p].floors[floor] = (realtime[p].floors[floor] || 0) + 1;
+//     });
+
+//     if (unmappedDoors.size) {
+//       console.warn('Unmapped doors:\n' + Array.from(unmappedDoors).join('\n'));
+//     }
+
+//     return res.json({
+//       success: true,
+//       today,
+//       realtime,
+//       details: Object.values(lastByPerson)
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ success: false, message: 'Live summary failed' });
+//   }
+// };
+
+
+
+
+
+
+exports.getLiveSummary = async (req, res) => {
+  try {
+    const swipes = await service.fetchLiveOccupancy();
+
+    // 1. TODAY’S HEADCOUNT: first swipe per person
+    const firstByPerson = {};
+    swipes.forEach(r => {
+      const prev = firstByPerson[r.PersonGUID];
+      const t = new Date(r.LocaleMessageTime).getTime();
+      if (!prev || t < new Date(prev.LocaleMessageTime).getTime()) {
+        firstByPerson[r.PersonGUID] = r;
+      }
+    });
+    const todayRecs = Object.values(firstByPerson);
+    const today = { total: 0, Employee: 0, Contractor: 0, TempBadge: 0 };
+    todayRecs.forEach(r => {
+      today.total++;
+      if (isTempBadgeType(r.PersonnelType)) today.TempBadge++;
+      else if (isEmployeeType(r.PersonnelType)) today.Employee++;
+      else today.Contractor++;
+    });
+
+    // 2. REAL-TIME: last swipe per person, only InDirection-ish (with OutDirection eviction for true exits)
+    const lastByPerson = {};
+    swipes.forEach(r => {
+      const prev = lastByPerson[r.PersonGUID];
+      const t = new Date(r.LocaleMessageTime).getTime();
+      if (!prev || t > new Date(prev.LocaleMessageTime).getTime()) {
+        lastByPerson[r.PersonGUID] = r;
+      }
+    });
+
+    const realtime = {};
+    const unmappedDoors = new Set();
+
+    Object.values(lastByPerson).forEach(r => {
+      // If OutDirection, check if it truly maps to "Out of office" — if so, evict (don't count)
+      if (r.Direction === 'OutDirection') {
+        const floorCheck = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+        if (floorCheck && floorCheck.toString().trim().toLowerCase() === 'out of office') {
+          return; // true exit → evict
+        }
+        // otherwise fall through and count
+      }
+
+      const p = r.PartitionName2;
+      // initialize, including TempBadge for CR
+      if (!realtime[p]) {
+        realtime[p] = { total: 0, Employee: 0, Contractor: 0 };
+        if (p === 'CR.Costa Rica Partition') realtime[p].TempBadge = 0;
+        realtime[p].floors = {};
+      }
+
+      realtime[p].total++;
+      if (isTempBadgeType(r.PersonnelType)) realtime[p].TempBadge++;
+      else if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+      else realtime[p].Contractor++;
+
+      // get normalized floor (trim whitespace). If missing → 'Unmapped'
+      const rawFloor = lookupFloor(p, r.Door, r.Direction, unmappedDoors);
+      const normFloor = rawFloor ? String(rawFloor).trim() : 'Unmapped';
+      realtime[p].floors[normFloor] = (realtime[p].floors[normFloor] || 0) + 1;
+    });
+
+    if (unmappedDoors.size) {
+      console.warn('Unmapped doors:\n' + Array.from(unmappedDoors).join('\n'));
+    }
+
+    // Build enriched details with Floor added (trimmed or null)
+    const details = Object.values(lastByPerson).map(r => {
+      const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+      const floor = rawFloor ? String(rawFloor).trim() : null;
+      return {
+        ...r,
+        Floor: floor
+      };
+    });
+
+    return res.json({
+      success: true,
+      today,
+      realtime,
+      details
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: 'Live summary failed' });
+  }
+};

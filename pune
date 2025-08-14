@@ -1,3 +1,67 @@
+// controllers/employeeImageController.js
+const sql       = require('mssql');
+const { getPool } = require('../config/db');
+
+async function getEmployeeImage(req, res) {
+  console.log(`🎯 [GET] /api/employees/${req.params.id}/image called`);
+  try {
+    const pool = await getPool();
+    console.log('✅ DB pool acquired for image');
+    const result = await pool.request()
+      .input('id', sql.BigInt, req.params.id)
+      .query(`
+        SELECT AI.Image AS ImageBuffer
+        FROM ACVSCore.Access.Images AI
+        WHERE AI.ParentId = @id
+      `);
+    console.log('✅ Image query rows:', result.recordset.length);
+
+    if (!result.recordset.length || !result.recordset[0].ImageBuffer) {
+      console.warn('⚠️ No image found for ID', req.params.id);
+      return res.status(404).send('Image not found');
+    }
+
+    const buf = result.recordset[0].ImageBuffer;
+    const header = buf.toString('hex', 0, 4).toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (header.startsWith('ffd8')) contentType = 'image/jpeg';
+    else if (header.startsWith('89504e47')) contentType = 'image/png';
+    else if (header.startsWith('47494638')) contentType = 'image/gif';
+
+    console.log('✅ Serving image, type:', contentType, 'size:', buf.length);
+    res.setHeader('Content-Type', contentType);
+    return res.send(buf);
+
+  } catch (err) {
+    console.error('❌ Error in getEmployeeImage:', err.stack || err);
+    return res.status(500).send('Internal Server Error');
+  }
+}
+
+module.exports = { getEmployeeImage };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // controllers/employeeController.js
 const { getPool } = require('../config/db');
 

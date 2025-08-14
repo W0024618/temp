@@ -9,6 +9,285 @@ const getEmployees = async (req, res) => {
 
     const result = await pool.request().query(`
       SELECT
+        AP.ObjectID AS EmployeeObjID,
+        AP.Name AS EmpName,
+        CASE WHEN AP.Int1 = 0 THEN AP.Text12 ELSE CAST(AP.Int1 AS NVARCHAR(50)) END AS EmployeeID,
+        PT.Name AS PersonnelType,
+        AP.Text10 AS Manager_Name,
+        AP.Int4 AS Manager_WU_ID,
+        -- single image (if any)
+        (SELECT TOP 1 AI.Image FROM ACVSCore.Access.Images AI WHERE AI.ParentId = AP.ObjectID) AS Image,
+        -- total cards and states via subqueries (avoids GROUP BY)
+        (SELECT COUNT(*) FROM ACVSCore.Access.Credential C WHERE C.Name = AP.Name) AS Total_Cards,
+        (SELECT COUNT(*) FROM ACVSCore.Access.Credential C
+            WHERE C.Name = AP.Name
+              AND (C.ExpirationDateTime IS NULL OR C.ExpirationDateTime >= GETDATE())
+              AND (C.Disabled IS NULL OR C.Disabled = 0)
+              AND (C.Lost IS NULL OR C.Lost = 0)
+              AND (C.Stolen IS NULL OR C.Stolen = 0)
+        ) AS Active_Cards,
+        (SELECT COUNT(*) FROM ACVSCore.Access.Credential C
+            WHERE C.Name = AP.Name
+              AND C.ExpirationDateTime IS NOT NULL
+              AND C.ExpirationDateTime < GETDATE()
+        ) AS Expired_Cards,
+        AP.Disabled
+      FROM ACVSCore.Access.Personnel AP
+      LEFT JOIN ACVSCore.Access.PersonnelType PT ON PT.ObjectID = AP.PersonnelTypeID
+      ORDER BY AP.Name
+    `);
+
+    console.log('✅ Query executed, rows:', result.recordset.length);
+
+    const employees = result.recordset.map(emp => ({
+      id:               emp.EmployeeObjID,
+      EmpName:          emp.EmpName,
+      EmployeeID:       emp.EmployeeID,
+      PersonnelType:    emp.PersonnelType,
+      Manager_Name:     emp.Manager_Name,
+      Manager_WU_ID:    emp.Manager_WU_ID,
+      Profile_Disabled: emp.Disabled,
+      Total_Cards:      emp.Total_Cards ?? 0,
+      Active_Cards:     emp.Active_Cards ?? 0,
+      Expired_Cards:    emp.Expired_Cards ?? 0,
+      Employee_Status:  (emp.Disabled === 1) ? 'Deactive' : (emp.Active_Cards && emp.Active_Cards > 0 ? 'Active' : 'Deactive'),
+      imageUrl:         `/api/employees/${emp.EmployeeObjID}/image`
+    }));
+
+    return res.json(employees);
+  } catch (err) {
+    console.error('❌ Error in getEmployees:', err.stack || err);
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: err.message
+    });
+  }
+};
+
+module.exports = { getEmployees };
+
+
+
+
+
+
+
+
+// controllers/employeeLocationController.js
+const axios = require('axios');
+const sql = require('mssql');
+const { getPool } = require('../config/db');
+// ... OCCUPANCY_URLS and cache definitions stay the same ...
+
+async function getEmployeeLiveLocation(req, res) {
+  const employeeObjId = req.params.id;
+  if (!employeeObjId) return res.status(400).json({ error: 'Missing id' });
+
+  // Serve cache if fresh
+  const cached = cache[employeeObjId];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return res.json({ cached: true, ...cached.data });
+  }
+
+  try {
+    const pool = await getPool();
+
+    // Determine input type: numeric -> BigInt, otherwise treat as string and compare casted AP.ObjectID
+    let empQuery, request;
+    if (/^\d+$/.test(employeeObjId)) {
+      request = pool.request().input('objid', sql.BigInt, employeeObjId);
+      empQuery = `
+        SELECT AP.ObjectID,
+               AP.Name AS EmpName,
+               AP.Int1,
+               AP.Text12
+        FROM ACVSCore.Access.Personnel AP
+        WHERE AP.ObjectID = @objid
+      `;
+    } else {
+      // non-numeric ID (GUID or text) -> compare using string cast
+      request = pool.request().input('objid', sql.NVarChar(100), employeeObjId);
+      empQuery = `
+        SELECT AP.ObjectID,
+               AP.Name AS EmpName,
+               AP.Int1,
+               AP.Text12
+        FROM ACVSCore.Access.Personnel AP
+        WHERE CAST(AP.ObjectID AS NVARCHAR(100)) = @objid
+      `;
+    }
+
+    const empResult = await request.query(empQuery);
+
+    if (!empResult.recordset.length) {
+      console.warn(`[getEmployeeLiveLocation] Employee not found: ${employeeObjId}`);
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const empRow = empResult.recordset[0];
+    const EmployeeID = (empRow.Int1 === 0 || empRow.Int1 === '0' || empRow.Int1 === null)
+      ? (empRow.Text12 ? String(empRow.Text12) : '')
+      : String(empRow.Int1);
+
+    const empName = empRow.EmpName || '';
+
+    // Fetch occupancy endpoints concurrently (keep existing logic)
+    const requests = OCCUPANCY_URLS.map(u => axios.get(u, { timeout: 5000 }).catch(e => ({ error: e, url: u })));
+    const responses = await Promise.all(requests);
+
+    let allDetails = [];
+    for (const r of responses) {
+      if (!r || r.error) {
+        console.warn('Occupancy fetch failed for', r && r.url, r && r.error && r.error.message);
+        continue;
+      }
+      if (r.data && Array.isArray(r.data.details)) {
+        const src = r.config && r.config.url ? r.config.url : null;
+        const annotated = r.data.details.map(d => ({ ...d, __source: src }));
+        allDetails.push(...annotated);
+      }
+    }
+
+    const normalizeString = s => {
+      if (!s && s !== 0) return '';
+      return String(s).trim().toLowerCase();
+    };
+
+    const normEmployeeID = normalizeString(EmployeeID);
+    const normEmpName = normalizeString(empName);
+
+    const matches = allDetails.filter(rec => {
+      const recEmpId = normalizeString(rec.EmployeeID);
+      if (recEmpId && normEmployeeID && recEmpId === normEmployeeID) return true;
+      const recName = normalizeString(rec.ObjectName1);
+      if (recName && normEmpName && recName === normEmpName) return true;
+      return false;
+    });
+
+    if (!matches.length) {
+      const result = { found: false, message: 'No recent swipe found' };
+      cache[employeeObjId] = { ts: Date.now(), data: result };
+      return res.json(result);
+    }
+
+    // find most recent timestamped record
+    function parseRecordTime(rec) {
+      if (rec.LocaleMessageTime) return new Date(rec.LocaleMessageTime);
+      if (rec.snapshotTime) return new Date(rec.snapshotTime);
+      if (rec.Dateonly && rec.Swipe_Time) return new Date(`${rec.Dateonly}T${rec.Swipe_Time}Z`);
+      return null;
+    }
+
+    let best = null;
+    for (const m of matches) {
+      const t = parseRecordTime(m);
+      if (!t) continue;
+      if (!best || t > best.time) best = { rec: m, time: t };
+    }
+
+    if (!best) {
+      const result = { found: false, message: 'No timestamped swipe found' };
+      cache[employeeObjId] = { ts: Date.now(), data: result };
+      return res.json(result);
+    }
+
+    const r = best.rec;
+    const payload = {
+      found: true,
+      source: r.__source || null,
+      partition: r.PartitionName2 || r.Partition || null,
+      floor: r.Floor || r.Zone || r.floor || null,
+      Zone: r.Zone,
+      door: r.Door || null,
+      direction: r.Direction || null,
+      timestampUTC: r.LocaleMessageTime || r.snapshotTime || (r.Dateonly ? `${r.Dateonly}T${r.Swipe_Time}Z` : null),
+      personnelType: r.PersonnelType || null,
+      cardNumber: r.CardNumber || null,
+      raw: r
+    };
+
+    cache[employeeObjId] = { ts: Date.now(), data: payload };
+    return res.json(payload);
+  } catch (err) {
+    console.error('getEmployeeLiveLocation error', err && err.stack || err);
+    return res.status(500).json({ error: 'Failed to fetch live location', message: err.message });
+  }
+}
+
+module.exports = { getEmployeeLiveLocation };
+
+
+
+
+
+
+
+
+
+
+// CurrentLocation.jsx (only the useEffect portion)
+useEffect(() => {
+  if (!empId) {
+    setLoc(null);
+    setError('');
+    return;
+  }
+
+  let cancelled = false;
+  setLoading(true);
+  setError('');
+  setLoc(null);
+
+  axios
+    .get(`http://10.199.22.57:5001/api/employees/${encodeURIComponent(empId)}/location`)
+    .then((res) => {
+      if (cancelled) return;
+      setLoc(res.data);
+    })
+    .catch((err) => {
+      if (cancelled) return;
+      console.error('Location load error', err?.response || err?.message || err);
+      if (err?.response?.status === 404) setError('Employee not found');
+      else setError('Failed to load location');
+    })
+    .finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [empId]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// controllers/employeeController.js
+const { getPool } = require('../config/db');
+
+const getEmployees = async (req, res) => {
+  console.log('🎯 [GET] /api/employees called');
+  try {
+    const pool = await getPool();
+    console.log('✅ DB pool acquired');
+
+    const result = await pool.request().query(`
+      SELECT
         AP.ObjectID                   AS EmployeeObjID,
         AP.Name                       AS EmpName,
         CASE

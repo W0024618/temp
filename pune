@@ -1,3 +1,196 @@
+// controllers/employeeController.js
+const { getPool } = require('../config/db');
+
+const getEmployees = async (req, res) => {
+  console.log('🎯 [GET] /api/employees called');
+  try {
+    const pool = await getPool();
+    console.log('✅ DB pool acquired');
+
+    const result = await pool.request().query(`
+      SELECT
+        AP.ObjectID                   AS EmployeeObjID,
+        AP.Name                       AS EmpName,
+        CASE
+          WHEN AP.Int1 = 0 OR AP.Int1 IS NULL THEN AP.Text12
+          ELSE CAST(AP.Int1 AS NVARCHAR(100))
+        END                           AS EmployeeID,
+        PT.Name                       AS PersonnelType,
+        AP.Text10                     AS Manager_Name,
+        AP.Int4                       AS Manager_WU_ID,
+        MAX(AI.Image)                 AS Image,  -- aggregate image safely
+        AP.Disabled                   AS Profile_Disabled,
+        COUNT(DISTINCT ACR.ObjectID)  AS Total_Cards,
+        SUM(
+          CASE
+            WHEN (ACR.ExpirationDateTime IS NULL OR ACR.ExpirationDateTime >= GETDATE())
+                 AND (ACR.Disabled IS NULL OR ACR.Disabled = 0)
+                 AND (ACR.Lost IS NULL OR ACR.Lost = 0)
+                 AND (ACR.Stolen IS NULL OR ACR.Stolen = 0)
+            THEN 1 ELSE 0
+          END
+        )                             AS Active_Cards,
+        SUM(
+          CASE
+            WHEN ACR.ExpirationDateTime IS NOT NULL AND ACR.ExpirationDateTime < GETDATE()
+            THEN 1 ELSE 0
+          END
+        )                             AS Expired_Cards,
+        CASE
+          WHEN AP.Disabled = 1 THEN 'Deactive'
+          WHEN AP.Disabled = 0 AND SUM(
+            CASE
+              WHEN (ACR.ExpirationDateTime IS NULL OR ACR.ExpirationDateTime >= GETDATE())
+                   AND (ACR.Disabled IS NULL OR ACR.Disabled = 0)
+                   AND (ACR.Lost IS NULL OR ACR.Lost = 0)
+                   AND (ACR.Stolen IS NULL OR ACR.Stolen = 0)
+              THEN 1 ELSE 0
+            END
+          ) > 0 THEN 'Active'
+          ELSE 'Deactive'
+        END                           AS Employee_Status
+      FROM ACVSCore.Access.Personnel AP
+      LEFT JOIN ACVSCore.Access.Credential    ACR ON AP.Name = ACR.Name
+      LEFT JOIN ACVSCore.Access.PersonnelType PT  ON PT.ObjectID = AP.PersonnelTypeID
+      LEFT JOIN ACVSCore.Access.Images        AI  ON AI.ParentId = AP.ObjectID
+      GROUP BY
+        AP.ObjectID,
+        AP.Name,
+        AP.Int1,
+        AP.Text12,
+        PT.Name,
+        AP.Text10,
+        AP.Int4,
+        AP.Disabled
+      ORDER BY AP.Name
+    `);
+
+    console.log('✅ Query executed, rows:', result.recordset.length);
+
+    const employees = result.recordset.map(emp => ({
+      id:               emp.EmployeeObjID,
+      EmpName:          emp.EmpName,
+      EmployeeID:       emp.EmployeeID,
+      PersonnelType:    emp.PersonnelType,
+      Manager_Name:     emp.Manager_Name,
+      Manager_WU_ID:    emp.Manager_WU_ID,
+      Profile_Disabled: emp.Profile_Disabled,
+      Total_Cards:      emp.Total_Cards,
+      Active_Cards:     emp.Active_Cards,
+      Employee_Status:  emp.Employee_Status,
+      imageUrl:         `/api/employees/${emp.EmployeeObjID}/image`
+    }));
+
+    return res.json(employees);
+  } catch (err) {
+    console.error('❌ Error in getEmployees:', err.stack || err);
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: err.message
+    });
+  }
+};
+
+module.exports = { getEmployees };
+
+
+
+
+
+
+
+
+// controllers/employeeLocationController.js (inside getEmployeeLiveLocation)
+const sql = require('mssql');
+// ... other code above remains the same ...
+
+async function getEmployeeLiveLocation(req, res) {
+  const rawId = req.params.id;
+  if (!rawId) return res.status(400).json({ error: 'Missing id' });
+
+  // serve cache...
+  const cached = cache[rawId];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return res.json({ cached: true, ...cached.data });
+  }
+
+  try {
+    const pool = await getPool();
+
+    // Try several lookup strategies: objectid (bigint), Int1 (employee numeric ID), Text12 (string ID), Name
+    let empResult = null;
+
+    // If rawId looks like a number, try ObjectID and Int1
+    if (/^\d+$/.test(String(rawId))) {
+      // try ObjectID match
+      empResult = await pool.request()
+        .input('objid', sql.BigInt, rawId)
+        .query(`
+          SELECT AP.ObjectID, AP.Name AS EmpName, AP.Int1, AP.Text12
+          FROM ACVSCore.Access.Personnel AP
+          WHERE AP.ObjectID = @objid
+        `);
+
+      if (!empResult.recordset.length) {
+        // try Int1 numeric match
+        empResult = await pool.request()
+          .input('int1', sql.BigInt, rawId)
+          .query(`
+            SELECT AP.ObjectID, AP.Name AS EmpName, AP.Int1, AP.Text12
+            FROM ACVSCore.Access.Personnel AP
+            WHERE AP.Int1 = @int1
+          `);
+      }
+    }
+
+    // If still not found, try text fields (Text12 or Name)
+    if (!empResult || !empResult.recordset.length) {
+      empResult = await pool.request()
+        .input('maybe', sql.NVarChar(200), rawId)
+        .query(`
+          SELECT AP.ObjectID, AP.Name AS EmpName, AP.Int1, AP.Text12
+          FROM ACVSCore.Access.Personnel AP
+          WHERE AP.Text12 = @maybe OR AP.Name = @maybe
+        `);
+    }
+
+    if (!empResult || !empResult.recordset.length) {
+      console.warn(`Employee lookup: not found for id=${rawId}`);
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const empRow = empResult.recordset[0];
+    // EmployeeID logic mirroring existing query:
+    const EmployeeID = (empRow.Int1 === 0 || empRow.Int1 === '0' || empRow.Int1 === null)
+      ? (empRow.Text12 ? String(empRow.Text12) : '')
+      : String(empRow.Int1);
+
+    const empName = empRow.EmpName || '';
+
+    // ... rest of existing logic to call occupancy endpoints, match records, etc. ...
+
+
+
+
+
+
+// server.js
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
+
+
+
+
+
+
+
+
+
+
+
+
 I have deployee my Employee Verification filr on Windows 2019 but we got one issue need to fix
 Read below error carefully and fix this think long and solve thsi issue carefully...
 Failed to load resource: the server responded with a status of 404 (Not Found)Understand this error

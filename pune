@@ -1,3 +1,34 @@
+
+const express = require('express');
+const router  = express.Router();
+
+const { getEmployees }     = require('../controllers/employeeController');
+const { getEmployeeImage } = require('../controllers/employeeImageController');
+
+const { getEmployeeStats } = require('../controllers/employeeController');
+
+
+const { getEmployeeLiveLocation } = require('../controllers/employeeLocationController');
+router.get('/employees/:id/location', getEmployeeLiveLocation);
+
+// Metadata endpoint
+router.get('/employees', getEmployees);
+
+// Image stream endpoint
+router.get('/employees/:id/image', getEmployeeImage);
+
+// ... other routes
+router.get('/stats', getEmployeeStats);
+
+module.exports = router;
+
+
+
+
+
+
+
+
 C:\Users\W0024618\Desktop\employee-verification\controllers\employeeLocationController.js
 
 

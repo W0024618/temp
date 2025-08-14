@@ -1,615 +1,350 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Web site created using create-react-app"
-    />
-    
-     <link rel="icon" href="favicon.png" sizes="32x32" type="images/png" >
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    
-<!-- <script src="https://cdn.tailwindcss.com"></script> -->
-
-
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link
-  rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
-/>
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
-
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>Associate Verification Tool</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
-  </body>
-</html>
-
-
-
-
-// controllers/employeeLocationController.js
-// (replace the existing getEmployeeLiveLocation function with this)
-
-async function getEmployeeLiveLocation(req, res) {
-  const employeeObjId = req.params.id;
-  if (!employeeObjId) return res.status(400).json({ error: 'Missing id' });
-
-  // Serve cache if fresh
-  const cached = cache[employeeObjId];
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return res.json({ cached: true, ...cached.data });
-  }
-
-  try {
-    // 1) Fetch EmployeeID and Name from DB (same logic as getEmployees)
-    const pool = await getPool();
-
-    // Decide whether the ID looks numeric or not
-    const isNumericId = /^\d+$/.test(String(employeeObjId));
-
-    let request = pool.request();
-    let empResult;
-
-    if (isNumericId) {
-      request = request.input('objid', sql.BigInt, employeeObjId);
-      empResult = await request.query(`
-        SELECT AP.ObjectID,
-               AP.Name AS EmpName,
-               AP.Int1,
-               AP.Text12
-        FROM ACVSCore.Access.Personnel AP
-        WHERE AP.ObjectID = @objid
-      `);
-    } else {
-      // Non-numeric (GUID/text). Compare by casting AP.ObjectID to NVARCHAR.
-      request = request.input('objid', sql.NVarChar(100), String(employeeObjId));
-      empResult = await request.query(`
-        SELECT AP.ObjectID,
-               AP.Name AS EmpName,
-               AP.Int1,
-               AP.Text12
-        FROM ACVSCore.Access.Personnel AP
-        WHERE CAST(AP.ObjectID AS NVARCHAR(100)) = @objid
-      `);
-    }
-
-    if (!empResult.recordset.length) {
-      console.warn(`[getEmployeeLiveLocation] Employee not found for id=${employeeObjId}`);
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-
-    const empRow = empResult.recordset[0];
-    // EmployeeID logic mirroring existing query:
-    const EmployeeID = (empRow.Int1 === 0 || empRow.Int1 === '0' || empRow.Int1 === null)
-      ? (empRow.Text12 ? String(empRow.Text12) : '')
-      : String(empRow.Int1);
-
-    const empName = empRow.EmpName || '';
-
-    // 2) Query occupancy endpoints concurrently
-    const requests = OCCUPANCY_URLS.map(u => axios.get(u, { timeout: 5000 }).catch(e => ({ error: e, url: u })));
-    const responses = await Promise.all(requests);
-
-    // 3) Collect and flatten details
-    let allDetails = [];
-    for (const r of responses) {
-      if (!r || r.error) {
-        console.warn('Occupancy fetch failed for', r && r.url, r && r.error && r.error.message);
-        continue;
-      }
-      if (r.data && Array.isArray(r.data.details)) {
-        const src = r.config && r.config.url ? r.config.url : null;
-        const annotated = r.data.details.map(d => ({ ...d, __source: src }));
-        allDetails.push(...annotated);
-      }
-    }
-
-    // 4) Find matches by EmployeeID (preferred), fallback to name (ObjectName1)
-    const normEmployeeID = normalizeString(EmployeeID);
-    const normEmpName = normalizeString(empName);
-
-    const matches = allDetails.filter(rec => {
-      const recEmpId = normalizeString(rec.EmployeeID);
-      if (recEmpId && normEmployeeID && recEmpId === normEmployeeID) return true;
-
-      const recName = normalizeString(rec.ObjectName1);
-      if (recName && normEmpName && recName === normEmpName) return true;
-
-      return false;
-    });
-
-    if (!matches.length) {
-      const result = { found: false, message: 'No recent swipe found' };
-      cache[employeeObjId] = { ts: Date.now(), data: result };
-      return res.json(result);
-    }
-
-    // 5) Select most recent
-    let best = null;
-    for (const m of matches) {
-      const t = parseRecordTime(m);
-      if (!t) continue;
-      if (!best) best = { rec: m, time: t };
-      else if (t > best.time) best = { rec: m, time: t };
-    }
-
-    if (!best) {
-      const result = { found: false, message: 'No timestamped swipe found' };
-      cache[employeeObjId] = { ts: Date.now(), data: result };
-      return res.json(result);
-    }
-
-    const r = best.rec;
-
-    const payload = {
-      found: true,
-      source: r.__source || null,
-      partition: r.PartitionName2 || r.Partition || null,
-      floor: r.Floor || r.Zone || r.floor || null,
-      Zone: r.Zone,
-      door: r.Door || null,
-      direction: r.Direction || null,
-      timestampUTC: r.LocaleMessageTime || r.snapshotTime || (r.Dateonly ? `${r.Dateonly}T${r.Swipe_Time}Z` : null),
-      personnelType: r.PersonnelType || null,
-      cardNumber: r.CardNumber || null,
-      raw: r
-    };
-
-    cache[employeeObjId] = { ts: Date.now(), data: payload };
-    return res.json(payload);
-  } catch (err) {
-    console.error('getEmployeeLiveLocation error', err && err.stack || err);
-    return res.status(500).json({ error: 'Failed to fetch live location', message: err.message });
-  }
-}
-
-module.exports = { getEmployeeLiveLocation };
-
-
-
-
-
-
-
-
-
-
-
-// CurrentLocation.jsx (replace existing axios call in useEffect)
-axios
-  .get(`http://10.199.22.57:5001/api/employees/${encodeURIComponent(empId)}/location`)
-  .then((res) => {
-    if (cancelled) return;
-    setLoc(res.data);
-  })
-  .catch((err) => {
-    if (cancelled) return;
-    console.error('Location load error', err?.response || err?.message || err);
-    if (err?.response?.status === 404) setError('Employee not found');
-    else setError('Failed to load location');
-  })
-  .finally(() => {
-    if (!cancelled) setLoading(false);
-  });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Read below file carefully issue is only in 
-
-In Profile details 
-Failed to load location
-this is isisue need to fix that issue carefully....
-
-Profile Details
- Name	Diwate, Swapnil
- Employee ID	W0024618
- Manager	—
- Active Cards	1
-Swipe Details
-Failed to load location
-
-
-
-
-
-D:\DASHBOARD\employee-verification\controllers\employeeController.js
-
-
-// controllers/employeeController.js
-const { getPool } = require('../config/db');
-
-const getEmployees = async (req, res) => {
-  console.log('🎯 [GET] /api/employees called');
-  try {
-    const pool = await getPool();
-    console.log('✅ DB pool acquired');
-    const result = await pool.request().query(`
-      SELECT DISTINCT
-        AP.ObjectID           AS EmployeeObjID,     
-        AP.Name               AS "Emp Name",
-        CASE AP.Int1
-          WHEN 0 THEN AP.Text12
-          ELSE CAST(AP.Int1 AS NVARCHAR)
-        END                    AS "EmployeeID",
-        PT.Name               AS "PersonnelType",
-        AP.Text10             AS "Manager Name",
-        AP.Int4               AS Manager_WU_ID,
-        AI.Image              AS Image,
-        AP.Disabled           AS Profile_Disabled,
-        COUNT(ACR.Name)       AS Total_Cards,
-        SUM(
-          CASE
-            WHEN (ACR.ExpirationDateTime IS NULL OR ACR.ExpirationDateTime >= GETDATE())
-              AND (ACR.Disabled IS NULL OR ACR.Disabled = 0)
-              AND (ACR.Lost IS NULL OR ACR.Lost = 0)
-              AND (ACR.Stolen IS NULL OR ACR.Stolen = 0)
-            THEN 1 ELSE 0
-          END
-        )                      AS Active_Cards,
-        SUM(
-          CASE
-            WHEN ACR.ExpirationDateTime IS NOT NULL AND ACR.ExpirationDateTime < GETDATE()
-            THEN 1 ELSE 0
-          END
-        )                      AS Expired_Cards,
-        CASE
-          WHEN AP.Disabled = 1 THEN 'Deactive'
-          WHEN AP.Disabled = 0 THEN
-            CASE
-              WHEN SUM(
-                CASE
-                  WHEN (ACR.ExpirationDateTime IS NULL OR ACR.ExpirationDateTime >= GETDATE())
-                    AND (ACR.Disabled IS NULL OR ACR.Disabled = 0)
-                    AND (ACR.Lost IS NULL OR ACR.Lost = 0)
-                    AND (ACR.Stolen IS NULL OR ACR.Stolen = 0)
-                  THEN 1 ELSE 0
-                END
-              ) > 0 THEN 'Active'
-              ELSE 'Deactive'
-            END
-          ELSE 'Deactive'
-        END                    AS "Employee_Status"
-      FROM ACVSCore.Access.Personnel AP
-      INNER JOIN ACVSCore.Access.Credential    ACR ON AP.Name = ACR.Name
-      INNER JOIN ACVSCore.Access.PersonnelType PT  ON PT.ObjectID = AP.PersonnelTypeID
-      INNER JOIN ACVSCore.Access.Images        AI  ON AI.ParentId = AP.ObjectID
-      GROUP BY
-        AP.ObjectID,
-        AP.Name,
-        AP.Int1,
-        AP.Text12,
-        PT.Name,
-        AP.Text10,
-        AP.Int4,
-        AI.Image,
-        AP.Disabled
-      ORDER BY AP.Name
-    `);
-    console.log('✅ Query executed, rows:', result.recordset.length);
-
-    const employees = result.recordset.map(emp => ({
-      id:               emp.EmployeeObjID,
-      EmpName:          emp["Emp Name"],
-      EmployeeID:       emp.EmployeeID,
-      PersonnelType:    emp.PersonnelType,
-      Manager_Name:     emp["Manager Name"],
-      Manager_WU_ID:    emp.Manager_WU_ID,
-      Profile_Disabled: emp.Profile_Disabled,
-      Total_Cards:      emp.Total_Cards,
-      Active_Cards:     emp.Active_Cards,
-      Employee_Status:  emp.Employee_Status,
-      imageUrl:         `/api/employees/${emp.EmployeeObjID}/image`
-    }));
-
-    return res.json(employees);
-  } catch (err) {
-    console.error('❌ Error in getEmployees:', err.stack || err);
-    return res.status(500).json({
-      error: 'Internal Server Error',
-      message: err.message
-    });
-  }
-};
-
-module.exports = { getEmployees };
-// ............................................
-
-// At the end of controllers/employeeController.js
-const getEmployeeStats = async (req, res) => {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      SELECT
-        COUNT(*) AS TotalProfiles,
-        SUM(CASE WHEN AP.Disabled = 0 THEN 1 ELSE 0 END) AS ActiveProfiles,
-        SUM(CASE WHEN AP.Disabled = 0 AND PT.Name = 'Employee' THEN 1 ELSE 0 END) AS ActiveEmployees,
-        SUM(CASE WHEN AP.Disabled = 0 AND PT.Name = 'Contractor' THEN 1 ELSE 0 END) AS ActiveContractors,
-        SUM(CASE WHEN AP.Disabled = 1 THEN 1 ELSE 0 END) AS TerminatedProfiles,
-        SUM(CASE WHEN AP.Disabled = 1 AND PT.Name = 'Employee' THEN 1 ELSE 0 END) AS TerminatedEmployees,
-        SUM(CASE WHEN AP.Disabled = 1 AND PT.Name = 'Contractor' THEN 1 ELSE 0 END) AS TerminatedContractors
-      FROM ACVSCore.Access.Personnel AP
-      INNER JOIN ACVSCore.Access.PersonnelType PT ON PT.ObjectID = AP.PersonnelTypeID
-    `);
-    res.json(result.recordset[0]);
-  } catch (err) {
-    console.error('❌ getEmployeeStats error', err.stack || err);
-    res.status(500).json({ error: 'Failed to get stats' });
-  }
-};
-
-module.exports.getEmployeeStats = getEmployeeStats;
-
-
-
-
-
-
-// controllers/employeeLocationController.js
-
-
-const axios = require('axios');
-const sql = require('mssql');
-const { getPool } = require('../config/db');
-
-const OCCUPANCY_URLS = [
-  'http://10.199.22.57:3006/api/occupancy/live-summary',
-
-  'http://10.199.22.57:3007/api/occupancy/live-summary',  // EMEA
-
-
-  'http://10.199.22.57:3008/api/occupancy/live-summary',  //Pune
-
-
-  'http://10.199.22.57:4000/api/occupancy/live-summary'   //laca
-
-];
-
-// Simple in-memory cache: { [employeeObjId]: { ts: Number, data: Object } }
-const cache = {};
-const CACHE_TTL_MS = 50000; // 5 seconds — tune as needed
-
-function normalizeString(s) {
-  if (!s && s !== 0) return '';
-  return String(s).trim().toLowerCase();
-}
-
-function parseRecordTime(rec) {
-  // Priority: LocaleMessageTime -> snapshotTime -> Dateonly + Swipe_Time
-  if (rec.LocaleMessageTime) return new Date(rec.LocaleMessageTime);
-  if (rec.snapshotTime) return new Date(rec.snapshotTime);
-  if (rec.Dateonly && rec.Swipe_Time) {
-    // e.g. "2025-08-11" + "00:02:41"
-    return new Date(`${rec.Dateonly}T${rec.Swipe_Time}Z`);
-  }
-  return null;
-}
-
-async function getEmployeeLiveLocation(req, res) {
-  const employeeObjId = req.params.id;
-  if (!employeeObjId) return res.status(400).json({ error: 'Missing id' });
-
-  // Serve cache if fresh
-  const cached = cache[employeeObjId];
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return res.json({ cached: true, ...cached.data });
-  }
-
-  try {
-    // 1) Fetch EmployeeID and Name from DB (same logic as getEmployees)
-    const pool = await getPool();
-    const empResult = await pool.request()
-      .input('objid', sql.BigInt, employeeObjId)
-      .query(`
-        SELECT AP.ObjectID,
-               AP.Name AS EmpName,
-               AP.Int1,
-               AP.Text12
-        FROM ACVSCore.Access.Personnel AP
-        WHERE AP.ObjectID = @objid
-      `);
-
-    if (!empResult.recordset.length) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-
-    const empRow = empResult.recordset[0];
-    // EmployeeID logic mirroring existing query:
-    const EmployeeID = (empRow.Int1 === 0 || empRow.Int1 === '0' || empRow.Int1 === null)
-      ? (empRow.Text12 ? String(empRow.Text12) : '')
-      : String(empRow.Int1);
-
-    const empName = empRow.EmpName || '';
-
-    // 2) Query occupancy endpoints concurrently
-    const requests = OCCUPANCY_URLS.map(u => axios.get(u, { timeout: 5000 }).catch(e => ({ error: e, url: u })));
-    const responses = await Promise.all(requests);
-
-    // 3) Collect and flatten details
-    let allDetails = [];
-    for (const r of responses) {
-      if (!r || r.error) {
-        // Log but continue
-        console.warn('Occupancy fetch failed for', r && r.url, r && r.error && r.error.message);
-        continue;
-      }
-      if (r.data && Array.isArray(r.data.details)) {
-        // Keep source url for debugging
-        const src = r.config && r.config.url ? r.config.url : null;
-        const annotated = r.data.details.map(d => ({ ...d, __source: src }));
-        allDetails.push(...annotated);
-      }
-    }
-
-    // 4) Find matches by EmployeeID (preferred), fallback to name (ObjectName1), then PersonGUID
-    const normEmployeeID = normalizeString(EmployeeID);
-    const normEmpName = normalizeString(empName);
-
-    const matches = allDetails.filter(rec => {
-      const recEmpId = normalizeString(rec.EmployeeID);
-      if (recEmpId && normEmployeeID && recEmpId === normEmployeeID) return true;
-
-      const recName = normalizeString(rec.ObjectName1);
-      if (recName && normEmpName && recName === normEmpName) return true;
-
-      if (rec.PersonGUID) {
-        // optionally, you can compare GUIDs if you have them
-      }
-      return false;
-    });
-
-    if (!matches.length) {
-      const result = { found: false, message: 'No recent swipe found' };
-      cache[employeeObjId] = { ts: Date.now(), data: result };
-      return res.json(result);
-    }
-
-    // 5) Select most recent
-    let best = null;
-    for (const m of matches) {
-      const t = parseRecordTime(m);
-      if (!t) continue;
-      if (!best) best = { rec: m, time: t };
-      else if (t > best.time) best = { rec: m, time: t };
-    }
-
-    if (!best) {
-      const result = { found: false, message: 'No timestamped swipe found' };
-      cache[employeeObjId] = { ts: Date.now(), data: result };
-      return res.json(result);
-    }
-
-    const r = best.rec;
-
-
-    const payload = {
-      found: true,
-      source: r.__source || null,
-      partition: r.PartitionName2 || r.Partition || null,
-      floor: r.Floor || r.Zone || r.floor || null,
-      Zone: r.Zone,
-      door: r.Door || null,
-      direction: r.Direction || null,
-      timestampUTC: r.LocaleMessageTime || r.snapshotTime || `${r.Dateonly}T${r.Swipe_Time}Z` || null,
-      personnelType: r.PersonnelType || null,
-      cardNumber: r.CardNumber || null,
-      raw: r
-    };
-    cache[employeeObjId] = { ts: Date.now(), data: payload };
-
-    return res.json(payload);
-
-  } catch (err) {
-    console.error('getEmployeeLiveLocation error', err && err.stack || err);
-    return res.status(500).json({ error: 'Failed to fetch live location', message: err.message });
-  }
-}
-
-module.exports = { getEmployeeLiveLocation };
-
-
-
-
-
-
-
-//D:\DASHBOARD\employee-verification\routes\employeeRoutes.js
-const express = require('express');
-const router  = express.Router();
-
-const { getEmployees }     = require('../controllers/employeeController');
-const { getEmployeeImage } = require('../controllers/employeeImageController');
-
-const { getEmployeeStats } = require('../controllers/employeeController');
-
-
-const { getEmployeeLiveLocation } = require('../controllers/employeeLocationController');
-router.get('/employees/:id/location', getEmployeeLiveLocation);
-
-// Metadata endpoint
-router.get('/employees', getEmployees);
-
-// Image stream endpoint
-router.get('/employees/:id/image', getEmployeeImage);
-
-// ... other routes
-router.get('/stats', getEmployeeStats);
-
-module.exports = router;
-
-
-
-
-
-
-
-
-
-// server.js
-
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
-
-const employeeRoutes = require('./routes/employeeRoutes');
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// ✅ Correct route
-app.use('/api', employeeRoutes);
-
-const PORT = process.env.PORT || 5001;
-
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://10.199.22.57:${PORT}`);
-});
-
-
+Read below file carefully and fix this issue Quickly
+ailed to load resource: the server responded with a status of 404 (Not Found)Understand this error
+App.js:204 ❌ Stats load failed AxiosErrorcode: "ERR_BAD_REQUEST"config: {transitional: {…}, adapter: Array(3), transformRequest: Array(1), transformResponse: Array(1), timeout: 0, …}message: "Request failed with status code 404"name: "AxiosError"request: XMLHttpRequest {onreadystatechange: null, readyState: 4, timeout: 0, withCredentials: false, upload: XMLHttpRequestUpload, …}response: config: {transitional: {…}, adapter: Array(3), transformRequest: Array(1), transformResponse: Array(1), timeout: 0, …}data: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /api/stats</pre>\n</body>\n</html>\n"headers: AxiosHeaders {content-length: '148', content-type: 'text/html; charset=utf-8'}request: XMLHttpRequest {onreadystatechange: null, readyState: 4, timeout: 0, withCredentials: false, upload: XMLHttpRequestUpload, …}status: 404statusText: "Not Found"[[Prototype]]: Objectstatus: 404stack: "AxiosError: Request failed with status code 404\n    at settle (http://10.199.22.57:3004/static/js/bundle.js:55408:12)\n    at XMLHttpRequest.onloadend (http://10.199.22.57:3004/static/js/bundle.js:54035:66)\n    at Axios.request (http://10.199.22.57:3004/static/js/bundle.js:54534:41)"[[Prototype]]: Error
+(anonymous) @ App.js:204Understand this error
+:5001/api/stats:1  Failed to load resource: the server responded with a status of 404 (Not Found)Understand this error
+App.js:204 ❌ Stats load failed AxiosError
+(anonymous) @ App.js:204Understand this error
+CurrentLocation.jsx:26  GET http://10.199.22.57:3004/api/employees/2097193776/location 404 (Not Found)
+dispatchXhrRequest @ xhr.js:195
+xhr @ xhr.js:15
+dispatchRequest @ dispatchRequest.js:51
+_request @ Axios.js:187
+request @ Axios.js:40
+Axios.<computed> @ Axios.js:213
+wrap @ bind.js:5
+(anonymous) @ CurrentLocation.jsx:26
+react-stack-bottom-frame @ react-dom-client.development.js:23949
+runWithFiberInDEV @ react-dom-client.development.js:1518
+commitHookEffectListMount @ react-dom-client.development.js:11886
+commitHookPassiveMountEffects @ react-dom-client.development.js:12024
+commitPassiveMountOnFiber @ react-dom-client.development.js:13840
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13834
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13834
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13853
+flushPassiveEffects @ react-dom-client.development.js:15737
+flushPendingEffects @ react-dom-client.development.js:15702
+flushSpawnedWork @ react-dom-client.development.js:15668
+commitRoot @ react-dom-client.development.js:15403
+commitRootWhenReady @ react-dom-client.development.js:14652
+performWorkOnRoot @ react-dom-client.development.js:14575
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245
+<CurrentLocation>
+exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
+EmployeeCard @ EmployeeCard.jsx:150
+react-stack-bottom-frame @ react-dom-client.development.js:23863
+renderWithHooksAgain @ react-dom-client.development.js:5629
+renderWithHooks @ react-dom-client.development.js:5541
+updateFunctionComponent @ react-dom-client.development.js:8897
+beginWork @ react-dom-client.development.js:10522
+runWithFiberInDEV @ react-dom-client.development.js:1518
+performUnitOfWork @ react-dom-client.development.js:15130
+workLoopSync @ react-dom-client.development.js:14956
+renderRootSync @ react-dom-client.development.js:14936
+performWorkOnRoot @ react-dom-client.development.js:14417
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245
+<EmployeeCard>
+exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
+App @ App.js:312
+react-stack-bottom-frame @ react-dom-client.development.js:23863
+renderWithHooksAgain @ react-dom-client.development.js:5629
+renderWithHooks @ react-dom-client.development.js:5541
+updateFunctionComponent @ react-dom-client.development.js:8897
+beginWork @ react-dom-client.development.js:10522
+runWithFiberInDEV @ react-dom-client.development.js:1518
+performUnitOfWork @ react-dom-client.development.js:15130
+workLoopSync @ react-dom-client.development.js:14956
+renderRootSync @ react-dom-client.development.js:14936
+performWorkOnRoot @ react-dom-client.development.js:14417
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245Understand this error
+CurrentLocation.jsx:26  GET http://10.199.22.57:3004/api/employees/2097193776/location 404 (Not Found)
+dispatchXhrRequest @ xhr.js:195
+xhr @ xhr.js:15
+dispatchRequest @ dispatchRequest.js:51
+_request @ Axios.js:187
+request @ Axios.js:40
+Axios.<computed> @ Axios.js:213
+wrap @ bind.js:5
+(anonymous) @ CurrentLocation.jsx:26
+react-stack-bottom-frame @ react-dom-client.development.js:23949
+runWithFiberInDEV @ react-dom-client.development.js:1518
+commitHookEffectListMount @ react-dom-client.development.js:11886
+commitHookPassiveMountEffects @ react-dom-client.development.js:12024
+reconnectPassiveEffects @ react-dom-client.development.js:14004
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:13997
+doubleInvokeEffectsOnFiber @ react-dom-client.development.js:15964
+runWithFiberInDEV @ react-dom-client.development.js:1518
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+commitDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15977
+flushPassiveEffects @ react-dom-client.development.js:15747
+flushPendingEffects @ react-dom-client.development.js:15702
+flushSpawnedWork @ react-dom-client.development.js:15668
+commitRoot @ react-dom-client.development.js:15403
+commitRootWhenReady @ react-dom-client.development.js:14652
+performWorkOnRoot @ react-dom-client.development.js:14575
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245
+<CurrentLocation>
+exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
+EmployeeCard @ EmployeeCard.jsx:150
+react-stack-bottom-frame @ react-dom-client.development.js:23863
+renderWithHooksAgain @ react-dom-client.development.js:5629
+renderWithHooks @ react-dom-client.development.js:5541
+updateFunctionComponent @ react-dom-client.development.js:8897
+beginWork @ react-dom-client.development.js:10522
+runWithFiberInDEV @ react-dom-client.development.js:1518
+performUnitOfWork @ react-dom-client.development.js:15130
+workLoopSync @ react-dom-client.development.js:14956
+renderRootSync @ react-dom-client.development.js:14936
+performWorkOnRoot @ react-dom-client.development.js:14417
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245
+<EmployeeCard>
+exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
+App @ App.js:312
+react-stack-bottom-frame @ react-dom-client.development.js:23863
+renderWithHooksAgain @ react-dom-client.development.js:5629
+renderWithHooks @ react-dom-client.development.js:5541
+updateFunctionComponent @ react-dom-client.development.js:8897
+beginWork @ react-dom-client.development.js:10522
+runWithFiberInDEV @ react-dom-client.development.js:1518
+performUnitOfWork @ react-dom-client.development.js:15130
+workLoopSync @ react-dom-client.development.js:14956
+renderRootSync @ react-dom-client.development.js:14936
+performWorkOnRoot @ react-dom-client.development.js:14417
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245Understand this error
+CurrentLocation.jsx:34 Location load error Request failed with status code 404
+(anonymous) @ CurrentLocation.jsx:34
+Promise.catch
+(anonymous) @ CurrentLocation.jsx:31
+react-stack-bottom-frame @ react-dom-client.development.js:23949
+runWithFiberInDEV @ react-dom-client.development.js:1518
+commitHookEffectListMount @ react-dom-client.development.js:11886
+commitHookPassiveMountEffects @ react-dom-client.development.js:12024
+reconnectPassiveEffects @ react-dom-client.development.js:14004
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:14051
+recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
+reconnectPassiveEffects @ react-dom-client.development.js:13997
+doubleInvokeEffectsOnFiber @ react-dom-client.development.js:15964
+runWithFiberInDEV @ react-dom-client.development.js:1518
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
+commitDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15977
+flushPassiveEffects @ react-dom-client.development.js:15747
+flushPendingEffects @ react-dom-client.development.js:15702
+flushSpawnedWork @ react-dom-client.development.js:15668
+commitRoot @ react-dom-client.development.js:15403
+commitRootWhenReady @ react-dom-client.development.js:14652
+performWorkOnRoot @ react-dom-client.development.js:14575
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245
+<CurrentLocation>
+exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
+EmployeeCard @ EmployeeCard.jsx:150
+react-stack-bottom-frame @ react-dom-client.development.js:23863
+renderWithHooksAgain @ react-dom-client.development.js:5629
+renderWithHooks @ react-dom-client.development.js:5541
+updateFunctionComponent @ react-dom-client.development.js:8897
+beginWork @ react-dom-client.development.js:10522
+runWithFiberInDEV @ react-dom-client.development.js:1518
+performUnitOfWork @ react-dom-client.development.js:15130
+workLoopSync @ react-dom-client.development.js:14956
+renderRootSync @ react-dom-client.development.js:14936
+performWorkOnRoot @ react-dom-client.development.js:14417
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245
+<EmployeeCard>
+exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
+App @ App.js:312
+react-stack-bottom-frame @ react-dom-client.development.js:23863
+renderWithHooksAgain @ react-dom-client.development.js:5629
+renderWithHooks @ react-dom-client.development.js:5541
+updateFunctionComponent @ react-dom-client.development.js:8897
+beginWork @ react-dom-client.development.js:10522
+runWithFiberInDEV @ react-dom-client.development.js:1518
+performUnitOfWork @ react-dom-client.development.js:15130
+workLoopSync @ react-dom-client.development.js:14956
+renderRootSync @ react-dom-client.development.js:14936
+performWorkOnRoot @ react-dom-client.development.js:14417
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245Understand this error
+CurrentLocation.jsx:26  GET http://10.199.22.57:3004/api/employees/2097207990/location 404 (Not Found)
+dispatchXhrRequest @ xhr.js:195
+xhr @ xhr.js:15
+dispatchRequest @ dispatchRequest.js:51
+_request @ Axios.js:187
+request @ Axios.js:40
+Axios.<computed> @ Axios.js:213
+wrap @ bind.js:5
+(anonymous) @ CurrentLocation.jsx:26
+react-stack-bottom-frame @ react-dom-client.development.js:23949
+runWithFiberInDEV @ react-dom-client.development.js:1518
+commitHookEffectListMount @ react-dom-client.development.js:11886
+commitHookPassiveMountEffects @ react-dom-client.development.js:12024
+commitPassiveMountOnFiber @ react-dom-client.development.js:13840
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13834
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13834
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13853
+flushPassiveEffects @ react-dom-client.development.js:15737
+flushPendingEffects @ react-dom-client.development.js:15702
+flushSpawnedWork @ react-dom-client.development.js:15668
+commitRoot @ react-dom-client.development.js:15403
+commitRootWhenReady @ react-dom-client.development.js:14652
+performWorkOnRoot @ react-dom-client.development.js:14575
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245Understand this error
+CurrentLocation.jsx:34 Location load error Request failed with status code 404
+(anonymous) @ CurrentLocation.jsx:34
+Promise.catch
+(anonymous) @ CurrentLocation.jsx:31
+react-stack-bottom-frame @ react-dom-client.development.js:23949
+runWithFiberInDEV @ react-dom-client.development.js:1518
+commitHookEffectListMount @ react-dom-client.development.js:11886
+commitHookPassiveMountEffects @ react-dom-client.development.js:12024
+commitPassiveMountOnFiber @ react-dom-client.development.js:13840
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13834
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13834
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13957
+recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
+commitPassiveMountOnFiber @ react-dom-client.development.js:13853
+flushPassiveEffects @ react-dom-client.development.js:15737
+flushPendingEffects @ react-dom-client.development.js:15702
+flushSpawnedWork @ react-dom-client.development.js:15668
+commitRoot @ react-dom-client.development.js:15403
+commitRootWhenReady @ react-dom-client.development.js:14652
+performWorkOnRoot @ react-dom-client.development.js:14575
+performSyncWorkOnRoot @ react-dom-client.development.js:16231
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
+processRootScheduleInMicrotask @ react-dom-client.development.js:16116
+(anonymous) @ react-dom-client.development.js:16245Understand this error
 
 
 
 D:\DASHBOARD\employee-verification\frontend\src\components\CurrentLocation.jsx
-
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
@@ -632,6 +367,10 @@ export default function CurrentLocation({ empId, showMore }) {
     setError('');
     setLoc(null);
 
+
+
+
+    
     axios
       .get(`http://10.199.22.57:5001/api/employees/${empId}/location`)
       .then((res) => {
@@ -743,8 +482,6 @@ export default function CurrentLocation({ empId, showMore }) {
 
 
 
-D:\DASHBOARD\employee-verification\frontend\src\components\EmployeeCard.jsx
-
 
 
 // C:\Users\W0024618\Desktop\employee-verification\frontend\src\components\EmployeeCard.jsx
@@ -849,6 +586,11 @@ export default function EmployeeCard({ emp }) {
     </div>
   );
 }
+
+
+
+
+
 
 
 
@@ -1079,25 +821,37 @@ export default App;
 
 
 
-D:\DASHBOARD\employee-verification\frontend\src\index.js
+// server.js
+
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+const employeeRoutes = require('./routes/employeeRoutes');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// ✅ Correct route
+app.use('/api', employeeRoutes);
+
+const PORT = process.env.PORT || 5001;
+
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://10.199.22.57:${PORT}`);
+});
 
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import './App.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-
-reportWebVitals();
 
 
 
+.env
 
+
+
+DB_SERVER=SRVWUPNQ0986V
+DB_USER=GSOC_Test
+DB_PASSWORD=Westernccure@2025
+DB_DATABASE=ACVSCore
+PORT=5001

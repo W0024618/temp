@@ -1,129 +1,290 @@
-C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\data\doorZoneMap.js
+C:\Users\W0024618\Desktop\employee-verification\controllers\employeeLocationController.js
+
+
+
+
+
+// controllers/employeeLocationController.js
+const axios = require('axios');
+const sql = require('mssql');
+const { getPool } = require('../config/db');
+
+const OCCUPANCY_URLS = [
+  'http://10.199.22.57:3006/api/occupancy/live-summary',
+
+  'http://10.199.22.57:3007/api/occupancy/live-summary',  // EMEA
+
+
+  'http://10.199.22.57:3008/api/occupancy/live-summary',  //Pune
+
+
+  'http://10.199.22.57:4000/api/occupancy/live-summary'   //laca
+
+];
+
+// Simple in-memory cache: { [employeeObjId]: { ts: Number, data: Object } }
+const cache = {};
+const CACHE_TTL_MS = 50000; // 5 seconds — tune as needed
+
+function normalizeString(s) {
+  if (!s && s !== 0) return '';
+  return String(s).trim().toLowerCase();
+}
+
+function parseRecordTime(rec) {
+  // Priority: LocaleMessageTime -> snapshotTime -> Dateonly + Swipe_Time
+  if (rec.LocaleMessageTime) return new Date(rec.LocaleMessageTime);
+  if (rec.snapshotTime) return new Date(rec.snapshotTime);
+  if (rec.Dateonly && rec.Swipe_Time) {
+    // e.g. "2025-08-11" + "00:02:41"
+    return new Date(`${rec.Dateonly}T${rec.Swipe_Time}Z`);
+  }
+  return null;
+}
+
+async function getEmployeeLiveLocation(req, res) {
+  const employeeObjId = req.params.id;
+  if (!employeeObjId) return res.status(400).json({ error: 'Missing id' });
+
+  // Serve cache if fresh
+  const cached = cache[employeeObjId];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return res.json({ cached: true, ...cached.data });
+  }
+
+  try {
+    // 1) Fetch EmployeeID and Name from DB (same logic as getEmployees)
+    const pool = await getPool();
+    const empResult = await pool.request()
+      .input('objid', sql.BigInt, employeeObjId)
+      .query(`
+        SELECT AP.ObjectID,
+               AP.Name AS EmpName,
+               AP.Int1,
+               AP.Text12
+        FROM ACVSCore.Access.Personnel AP
+        WHERE AP.ObjectID = @objid
+      `);
+
+    if (!empResult.recordset.length) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const empRow = empResult.recordset[0];
+    // EmployeeID logic mirroring existing query:
+    const EmployeeID = (empRow.Int1 === 0 || empRow.Int1 === '0' || empRow.Int1 === null)
+      ? (empRow.Text12 ? String(empRow.Text12) : '')
+      : String(empRow.Int1);
+
+    const empName = empRow.EmpName || '';
+
+    // 2) Query occupancy endpoints concurrently
+    const requests = OCCUPANCY_URLS.map(u => axios.get(u, { timeout: 5000 }).catch(e => ({ error: e, url: u })));
+    const responses = await Promise.all(requests);
+
+    // 3) Collect and flatten details
+    let allDetails = [];
+    for (const r of responses) {
+      if (!r || r.error) {
+        // Log but continue
+        console.warn('Occupancy fetch failed for', r && r.url, r && r.error && r.error.message);
+        continue;
+      }
+      if (r.data && Array.isArray(r.data.details)) {
+        // Keep source url for debugging
+        const src = r.config && r.config.url ? r.config.url : null;
+        const annotated = r.data.details.map(d => ({ ...d, __source: src }));
+        allDetails.push(...annotated);
+      }
+    }
+
+    // 4) Find matches by EmployeeID (preferred), fallback to name (ObjectName1), then PersonGUID
+    const normEmployeeID = normalizeString(EmployeeID);
+    const normEmpName = normalizeString(empName);
+
+    const matches = allDetails.filter(rec => {
+      const recEmpId = normalizeString(rec.EmployeeID);
+      if (recEmpId && normEmployeeID && recEmpId === normEmployeeID) return true;
+
+      const recName = normalizeString(rec.ObjectName1);
+      if (recName && normEmpName && recName === normEmpName) return true;
+
+      if (rec.PersonGUID) {
+        // optionally, you can compare GUIDs if you have them
+      }
+      return false;
+    });
+
+    if (!matches.length) {
+      const result = { found: false, message: 'No recent swipe found' };
+      cache[employeeObjId] = { ts: Date.now(), data: result };
+      return res.json(result);
+    }
+
+    // 5) Select most recent
+    let best = null;
+    for (const m of matches) {
+      const t = parseRecordTime(m);
+      if (!t) continue;
+      if (!best) best = { rec: m, time: t };
+      else if (t > best.time) best = { rec: m, time: t };
+    }
+
+    if (!best) {
+      const result = { found: false, message: 'No timestamped swipe found' };
+      cache[employeeObjId] = { ts: Date.now(), data: result };
+      return res.json(result);
+    }
+
+    const r = best.rec;
+
+
+
+    const payload = {
+      found: true,
+      source: r.__source || null,
+      partition: r.PartitionName2 || r.Partition || null,
+      floor: r.Floor || r.Zone || r.floor || null,
+      Zone: r.Zone,
+      door: r.Door || null,
+      direction: r.Direction || null,
+      timestampUTC: r.LocaleMessageTime || r.snapshotTime || `${r.Dateonly}T${r.Swipe_Time}Z` || null,
+      personnelType: r.PersonnelType || null,
+      cardNumber: r.CardNumber || null,
+      raw: r
+    };
+    cache[employeeObjId] = { ts: Date.now(), data: payload };
+
+    return res.json(payload);
+
+  } catch (err) {
+    console.error('getEmployeeLiveLocation error', err && err.stack || err);
+    return res.status(500).json({ error: 'Failed to fetch live location', message: err.message });
+  }
+}
+
+module.exports = { getEmployeeLiveLocation };
 
 
 
 
 
 
-// data/doorZoneMap.js
 
 
-const doorZoneMap = {
 
 
-  // Podium / Red
-  "APAC_IN_PUN_PODIUM_RED_IDF ROOM-02-RESTRICTED DOOR___InDirection":                 "Red Zone",
-  "APAC_IN_PUN_PODIUM_ST2 DOOR 1 (RED)___InDirection":                            "Red Zone",
-  "APAC_IN_PUN_PODIUM_ST2 DOOR 1 (RED)___OutDirection":                           "Red Zone",
-  "APAC_IN_PUN_PODIUM_RED_MAIN LIFT LOBBY ENTRY 1-DOOR___InDirection":                 "Red Zone",
-  "APAC_IN_PUN_PODIUM_RED_MAIN LIFT LOBBY ENTRY 1-DOOR___OutDirection":                "Out of office",
-  "APAC_IN_PUN_PODIUM_ST 1-DOOR 1 (RED)___InDirection":                                "Red Zone",
-  "APAC_IN_PUN_PODIUM_ST 1-DOOR 1 (RED)___OutDirection":                               "Red Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_RED_RECEPTION TO WS ENTRY 1-DOOR NEW___InDirection":             "Red Zone",
-  "APAC_IN_PUN_PODIUM_RED_RECEPTION TO WS ENTRY 1-DOOR NEW___OutDirection":            "Reception Area",
-  "APAC_IN_PUN_PODIUM_RED_RECREATION AREA FIRE EXIT 1-DOOR NEW___InDirection":         "Red Zone",
-  "APAC_IN_PUN_PODIUM_RED_RECREATION AREA FIRE EXIT 1-DOOR NEW___OutDirection":        "Yellow Zone - Outer Area",
 
-  // Podium / Yellow
-  "APAC_IN_PUN_PODIUM_ST2 DOOR 2 (YELLOW)___InDirection":                              "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_ST2 DOOR 2 (YELLOW)___OutDirection":                             "Yellow Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_YELLOW_MDF RESTRICTED DOOR___InDirection":                       "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_IT STORE ROOM-DOOR RESTRICTED DOOR___InDirection":        "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_REPRO STORE-DOOR RESTRICTED DOOR___InDirection":           "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_CONTROL PANEL ROOM-DOOR RESTRICTED DOOR___InDirection":   "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_PREACTION ROOM-DOOR RESTRICTED DOOR___InDirection":        "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_TESTING LAB-DOOR RESTRICTED DOOR___InDirection":           "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_RECEPTION ENTRY-DOOR___InDirection":                       "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_RECEPTION ENTRY-DOOR___OutDirection":                      "Reception Area",
-  "APAC_IN_PUN_PODIUM_YELLOW_MAIN LIFT LOBBY-DOOR NEW___InDirection":                   "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_MAIN LIFT LOBBY-DOOR NEW___OutDirection":                  "Out of office",
-  "APAC_IN_PUN_PODIUM_ST 1 DOOR 2 (YELLOW)___InDirection":                               "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_ST 1 DOOR 2 (YELLOW)___OutDirection":                              "Yellow Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_YELLOW_FIRE EXIT 1-DOOR NEW___InDirection":                       "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_FIRE EXIT 1-DOOR NEW___OutDirection":                      "Yellow Zone - Outer Area",
+C:\Users\W0024618\Desktop\employee-verification\frontend\src\components\CurrentLocation.jsx
 
-  // Podium / Green
-  "APAC_IN_PUN_PODIUM_GREEN-_IDF ROOM 1-RESTRICTED DOOR___InDirection":                "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN_UPS ENTRY 1-DOOR RESTRICTED DOOR___InDirection":            "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN_UPS ENTRY 2-DOOR RESTRICTED DOOR___InDirection":            "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN_LOCKER HR STORE 3-DOOR RESTRICTED DOOR___InDirection":      "Green Zone",
-  "APAC_IN_PUN_PODIUM_ST4 DOOR 2 (GREEN)___InDirection":                                "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN-MAIN LIFT LOBBY-DOOR___InDirection":                        "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN-MAIN LIFT LOBBY-DOOR___OutDirection":                       "Green Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_ST3 DOOR 2 (GREEN)___InDirection":                                "Green Zone",
-  "APAC_IN_PUN_PODIUM_ST3 DOOR 2 (GREEN)___OutDirection":                               "Green Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_GREEN_RECEPTION ENTRY-DOOR___InDirection":                        "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN_RECEPTION ENTRY-DOOR___OutDirection":                       "Reception Area",
 
-  // Podium / Orange
-  "APAC_IN_PUN_PODIUM_ST4 DOOR 1 (ORANGE)___InDirection":                               "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_RECEPTION ENTRY-DOOR___InDirection":                      "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_RECEPTION ENTRY-DOOR___OutDirection":                     "Reception Area",
-  "APAC_IN_PUN_PODIUM_ST3_DOOR 1 (ORANGE)___InDirection":                              "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ST3_DOOR 1 (ORANGE)___OutDirection":                             "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_MAIN LIFT LOBBY-DOOR___InDirection":                       "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_MAIN LIFT LOBBY-DOOR___OutDirection":                      "Orange Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_ORANGE-IDF ROOM 3-RESTRICTED DOOR___InDirection":                "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR NEW___InDirection":            "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR NEW___OutDirection":           "Orange Zone - Outer Area",
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { FaMapMarkerAlt, FaPalette, FaCalendarAlt, FaClock, FaDoorClosed, FaExchangeAlt } from 'react-icons/fa';
+import './EmployeeCard.css';
+export default function CurrentLocation({ empId, showMore }) {
+  const [loading, setLoading] = useState(false);
+  const [loc, setLoc] = useState(null);
+  const [error, setError] = useState('');
 
-  // Podium / GSOC door
-  "APAC_IN_PUN_PODIUM_GSOC DOOR RESTRICTED DOOR___InDirection":                         "Yellow Zone",
+  useEffect(() => {
+    if (!empId) {
+      setLoc(null);
+      setError('');
+      return;
+    }
 
-  // Podium / Main Right & Left Entry
-  "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR NEW___InDirection":                  "Reception Area",
-  "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR NEW___OutDirection":                 "Assembly Area",
-  "APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW___InDirection":                   "Reception Area",
-  "APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW___OutDirection":                  "Assembly Area",
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    setLoc(null);
 
-  // Podium / Turnstiles
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1-DOOR___InDirection":                               "Reception Area",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 2-DOOR___InDirection":                               "Reception Area",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 3-DOOR___InDirection":                               "Reception Area",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 4-DOOR___InDirection":                               "Reception Area",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 2 -OUT DOOR___OutDirection":                         "Out of office",
-  "APAC_IN_PUN-PODIUM_P-1 TURNSTILE 3 -OUT DOOR___OutDirection":                         "Out of office",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 4 -OUT DOOR___OutDirection":                         "Out of office",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1-OUT DOOR___OutDirection":                          "Out of office",
+    axios
+      .get(`http://localhost:5001/api/employees/${empId}/location`)
+      .then((res) => {
+        if (cancelled) return;
+        setLoc(res.data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Location load error', err?.message || err);
+        setError('Failed to load location');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  // 2nd-Floor / IDF + UPS/ELEC + Reception→Workstation + LiftLobby→Reception
-  "APAC_IN_PUN_2NDFLR_IDF ROOM_10:05:86 RESTRICTED DOOR___InDirection":                  "2nd Floor, Pune",
-  "APAC_IN_PUN_2NDFLR_UPS/ELEC ROOM RESTRICTED DOOR___InDirection":                      "2nd Floor, Pune",
-  "APAC_IN_PUN_2NDFLR_RECPTION TO WORKSTATION DOOR___InDirection":                       "2nd Floor, Pune",
-  "APAC_IN_PUN_2NDFLR_RECPTION TO WORKSTATION DOOR___OutDirection":                      "Out of office",
-  "APAC_IN_PUN_2NDFLR_LIFTLOBBY TO RECEPTION EMTRY DOOR___InDirection":                   "2nd Floor, Pune",
-  "APAC_IN_PUN_2NDFLR_LIFTLOBBY TO RECEPTION EMTRY DOOR___OutDirection":                  "2nd Floor, Pune",
+    return () => {
+      cancelled = true;
+    };
+  }, [empId]);
 
-  // Tower B
-  "APAC_IN_PUN_TOWER B_MAIN RECEPTION DOOR___InDirection":                               "Tower B",
-  "APAC_IN_PUN_TOWER B_MAIN RECEPTION DOOR___OutDirection":                              "Out of office",
-  "APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR___InDirection":                                   "Tower B",
-  "APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR___OutDirection":                                  "Out of office",
-  "APAC_IN_PUN_TOWER B_ST6_GYM SIDE DOOR___InDirection":                                 "Tower B",
-  "APAC_IN_PUN_TOWER B_ST6_GYM SIDE DOOR___OutDirection":                                "Tower B",
-  "APAC_IN_PUN_TOWER B_ST6_WKS SIDE DOOR___InDirection":                                 "Tower B",
-  "APAC_IN_PUN_TOWER B_ST6_WKS SIDE DOOR___OutDirection":                                "Tower B",
-  "APAC_IN_PUN_TOWER B_ST5_KAPIL DEV DOOR___InDirection":                                "Tower B",
-  "APAC_IN_PUN_TOWER B_ST5_KAPIL DEV DOOR___OutDirection":                               "Tower B",
-  "APAC_IN_PUN_TOWER B_ST5_WKS SIDE DOOR___InDirection":                                 "Tower B",
-  "APAC_IN_PUN_TOWER B_ST5_WKS SIDE DOOR___OutDirection":                                "Tower B",
-  "APAC_IN_PUN_TOWER B_RECEPTION LEFT DOOR___InDirection":                               "Tower B",
-  "APAC_IN_PUN_TOWER B_RECEPTION LEFT DOOR___OutDirection":                              "Tower B",
-  "APAC_IN_PUN_TOWER B_RECEPTION RIGHT DOOR___InDirection":                              "Tower B",
-  "APAC_IN_PUN_TOWER B_RECEPTION RIGHT DOOR___OutDirection":                             "Tower B",
-  "APAC_IN_PUN_TOWER B_IBMS ROOM___InDirection":                                         "Tower B",
-  "APAC_IN_PUN_TOWER B_UPS ROOM___InDirection":                                          "Tower B",
-  "APAC_IN_PUN_TOWER B_MDF ROOM___InDirection":                                          "Tower B",
-  "APAC_IN_PUN_TOWER B_PAC ROOM___InDirection":                                          "Tower B",
-  "APAC_IN_PUN_TOWER B_IT STORE ROOM___InDirection":                                    "Tower B",
-  "APAC_IN_PUN_TOWER B_GYM ROOM___InDirection":                                          "Tower B GYM",
-  "APAC_IN_PUN_TOWER B_GYM ROOM___OutDirection":                                         "Tower B GYM",
-  "APAC_IN_PUN_TOWER B_SITE OPS STORE___InDirection":                    "Tower B",
-  "APAC_IN_PUN_TOWER B_INNOVATION CENTER___InDirection" :   "Tower B",
-  "APAC_IN_PUN_TOWER B_INNOVATION CENTER___OutDirection":   "Tower B",
-};
+  if (!empId) return null;
 
-module.exports = doorZoneMap;
+  return (
+    <div className="current-location-card" style={{ marginTop: 1 }}>
+      <h4 style={{ margin: '0 0 6px 0', fontSize: 14, color: '#f5a742' }}>Swipe Details</h4>
+
+      {loading && <div style={{ color: '#fff' }}>Loading location…</div>}
+      {error && <div style={{ color: '#fff' }}>{error}</div>}
+
+      {!loading && loc && !loc.found && (
+        <div style={{ color: '#2ced0e' }}>No recent swipe</div>
+      )}
+
+      {!loading && loc && loc.found && (
+
+
+        <table className="swipe-details-table">
+          <tbody>
+            <tr>
+              <td className="label"><FaMapMarkerAlt className="icon location" /> Location</td>
+              <td className="value">
+                {loc.partition || '—'}
+                {loc.floor ? ` · ${loc.floor}` : ''}
+              </td>
+            </tr>
+
+
+            <tr>
+              <td className="label">
+                <FaPalette className="icon zone" /> {loc.Zone ? 'Zone' : 'Floor'}
+              </td>
+              <td className="value">
+                {loc.Zone || loc.floor || '—'}
+              </td>
+            </tr>
+
+            {showMore && (
+              <>
+
+
+                <tr>
+                  <td className="label"><FaCalendarAlt className="icon date" /> Date</td>
+                  <td className="value">
+                    {loc.timestampUTC
+                      ? loc.timestampUTC.split('T')[0] // "2025-08-14"
+                      : '—'}
+                  </td>
+                </tr>
+
+
+
+                <tr>
+                  <td className="label"><FaClock className="icon time" /> Time</td>
+                  <td className="value">
+                    {loc.timestampUTC
+                      ? new Date(
+                        `1970-01-01T${loc.timestampUTC.split('T')[1].replace('Z', '')}Z`
+                      ).toLocaleTimeString([], {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                        timeZone: 'UTC'   // <- keep it in UTC so it shows "4:21 PM"
+                      })
+                      : '—'}
+                  </td>
+                </tr>
 
 
 
@@ -132,10 +293,26 @@ module.exports = doorZoneMap;
 
 
 
+                <tr>
+                  <td className="label"><FaDoorClosed className="icon door" /> Door</td>
+                  <td className="value">{loc.door || '—'}</td>
+                </tr>
+                <tr>
+                  <td className="label"><FaExchangeAlt className="icon direction" /> Direction</td>
+                  <td className="value">{loc.direction || '—'}</td>
+                </tr>
+              </>
+            )}
+          </tbody>
+        </table>
+
+      )}
+    </div>
+  );
+}
 
 
 
-C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\data\zoneFloorMap.js
 
 
 
@@ -143,43 +320,1624 @@ C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\data\zoneFloorMap.js
 
 
 
-// data/zoneFloorMap.js
-
-const zoneFloorMap = {
-  // Podium Floor
-  "Red Zone":                    "Podium Floor",
-  "Yellow Zone":                 "Podium Floor",
-  "Reception Area":              "Podium Floor",
-  "Green Zone":                  "Podium Floor",
-  "Orange Zone":                 "Podium Floor",
-  "Gsoc Zone":                   "Podium Floor",
-  "Assembly Area":               "Podium Floor",
-  "Red":"Podium Floor",
-
-  // 2nd Floor
-  "2nd Floor, Pune":             "2nd Floor",
-
-  // Tower B
-  "Tower B":                     "Tower B",
-  "Reception Area Tower B":      "Tower B",
-  "Tower B GYM":                 "Tower B",
-
-  // Outer‐Area variants (same floors as their base zones)
-  "Red Zone - Outer Area":               "Podium Floor",
-  "Yellow Zone - Outer Area":            "Podium Floor",
-  "Reception Area - Outer Area":         "Podium Floor",
-  "Green Zone - Outer Area":             "Podium Floor",
-  "Orange Zone - Outer Area":            "Podium Floor",
-  "Assembly Area - Outer Area":          "Podium Floor",
-  "2nd Floor, Pune - Outer Area":        "2nd Floor",
-  "Tower B - Outer Area":                "Tower B",
-  "Reception Area Tower B - Outer Area": "Tower B",
-  "Tower B GYM - Outer Area":            "Tower B",
-
-  // True “Out of office” eviction (we filter these out in the controller)
-  "Out of office":               "Podium Floor"
-};
-
-module.exports = zoneFloorMap;
 
 
+
+
+
+
+
+
+
+C:\Users\W0024618\Desktop\employee-verification\frontend\src\components\EmployeeCard.css                              
+
+
+/* Container */
+.employee-card-container {
+  display: flex;
+  gap: 28px;
+  align-items: stretch;
+  background: linear-gradient(180deg, #131318 0%, #1d1d26 100%);
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  color: #e6eef6;
+  max-width: 1100px;
+  margin: 24px auto;
+  font-family: "Segoe UI", Roboto, system-ui, -apple-system, "Helvetica Neue", Arial;
+}
+
+/* Left column */
+.left-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  min-width: 280px; /* keeps big photo on wide screens */
+}
+
+/* gradient ring around photo (instagram-like) */
+.photo-ring {
+  display: inline-block;
+  /* border-radius: 50%; */
+  padding: 3px; /* thickness of the ring */
+  background: conic-gradient(
+    from 180deg,
+    #ff2d95 0deg,
+    #ffcf2d 80deg,
+    #2de6b7 160deg,
+    #7a64ff 240deg,
+    #ff2d95 360deg
+  );
+  /* subtle inner shadow to match look */
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+/* photo size - responsive using clamp */
+.photo {
+  /* width: clamp(160px, 28vw, 260px);  */
+  /* height: clamp(160px, 28vw, 260px);  */
+  height: 290px;
+  object-fit: cover;
+  display: block;
+  /* border-radius: 50%; */
+  border: 4px solid rgba(255,255,255,0.04); 
+  background: #222;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.5);
+}
+
+/* Photo meta (name, role, status) */
+.photo-meta {
+  text-align: center;
+  margin-top: 4px;
+}
+
+.emp-name {
+  font-size: clamp(18px, 2.6vw, 26px); /* big name under photo */
+  font-weight: 700;
+  color: #38c6ff; /* cyan-ish like reference */
+  margin-bottom: 6px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.emp-role {
+  font-size: 13px;
+  color: rgba(230,238,246,0.7);
+  margin-bottom: 8px;
+}
+
+/* Status pill under name */
+.status-pill {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+  background: #6c757d;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+}
+
+
+.status-pill.deactive,
+.status-pill.terminated {
+  background: #e7776b;
+}
+
+/* status color variants */
+.status-pill.active { background: #12c38a; }
+.status-pill.deactive { background: #ec1e1e; }
+.status-pill.terminated { background: #e7776b; }
+
+/* separator line (vertical) */
+.separator {
+  width: 0.50px;
+  /* background: linear-gradient(to bottom, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); */
+  background: rgba(54, 53, 53, 0.652);
+  border-radius: 1px;
+  align-self: stretch;
+}
+
+/* Right column */
+.right-col {
+  flex: 1;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-left: 18px;
+}
+
+/* Profile title */
+.profile-title {
+  margin: 0 0 6px 0;
+  color: #49c2ff;
+  font-size: 20px;
+  letter-spacing: 0.2px;
+}
+
+/* details table */
+.details-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #e7eef7;
+  margin-bottom: 8px;
+}
+
+.details-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.details-table .label {
+   color: white;
+  font-weight: 700;
+  font-family: Arial, Helvetica, sans-serif;
+  opacity: 0.8;
+  width: 160px;
+  font-weight: 600;
+  /* color: rgba(255,255,255,0.85); */
+}
+
+.details-table .value {
+  color: rgba(230,238,246,0.95);
+}
+
+/* Socials and footer */
+.social-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* icons: default size and background circle like reference */
+.social-icons a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(0,200,255,0.14), rgba(0,200,255,0.05));
+  color: #7fe6ff;
+  text-decoration: none;
+  font-size: 16px;
+  margin-right: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.45);
+}
+
+/* small footer text */
+.made-by {
+  font-size: 13px;
+  color: rgba(230,238,246,0.7);
+}
+
+.heart {
+  color: #ff6b6b;
+  margin: 0 4px;
+}
+
+/* Responsive: stack on smaller screens */
+@media (max-width: 860px) {
+  .employee-card-container {
+    flex-direction: column;
+    padding: 20px;
+    gap: 18px;
+  }
+  .left-col {
+    min-width: auto;
+    align-items: center;
+  }
+  .separator { display: none; }
+  .right-col { padding-left: 0; }
+  .details-table .label { width: 110px; }
+}
+
+/* Very small screens: tighten spacing */
+@media (max-width: 420px) {
+  .photo { width: 160px; height: 160px; }
+  .emp-name { font-size: 18px; }
+  .details-table .label { width: 100px; font-size: 13px; }
+}
+
+
+
+
+
+
+.show-more-btn {
+  background: linear-gradient(90deg, #38c6ff, #4e9dff);
+  border: none;
+  color: white;
+  padding: 8px 14px;
+  font-size: 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  transition: background 0.3s ease;
+}
+
+.show-more-btn:hover {
+  background: linear-gradient(90deg, #4ed9ff, #6aa9ff);
+}
+
+.v-color{
+  color: white;
+  font-weight: 700;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+
+/* location */
+
+
+
+.swipe-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.swipe-details-table td {
+  padding: 8px 12px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.swipe-details-table .label {
+  font-weight: 600;
+  white-space: nowrap;
+  color: #ccc;
+}
+
+.swipe-details-table .value {
+  color: #fff;
+  word-break: break-word;
+}
+
+.icon {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.icon.location { color: #ff4d4d; }
+.icon.zone { color: #00bfff; }
+
+
+/* 📱 Mobile styles */
+@media (max-width: 600px) {
+  .swipe-details-table td {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+  }
+  
+  .swipe-details-table tr {
+    display: block;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .swipe-details-table .label {
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+C:\Users\W0024618\Desktop\employee-verification\frontend\src\components\EmployeeCard.jsx
+
+
+
+
+// C:\Users\W0024618\Desktop\employee-verification\frontend\src\components\EmployeeCard.jsx
+import React, { useState } from 'react';
+import { FaUser, FaIdBadge, FaUserTie, FaIdCard, FaCheckCircle, FaClone } from 'react-icons/fa';
+import CurrentLocation from './CurrentLocation';
+import './EmployeeCard.css';
+
+export default function EmployeeCard({ emp }) {
+  const [showMore, setShowMore] = useState(false);
+
+  if (!emp) return null;
+
+  const rawStatus = emp.Employee_Status || 'Deactive';
+  const normalizedStatus = rawStatus.trim().toLowerCase();
+  const isRedStatus =
+    normalizedStatus === 'deactive' || normalizedStatus === 'terminated';
+
+  return (
+    <div
+      className="employee-card-container"
+      data-status={normalizedStatus}
+      style={{
+        background: isRedStatus
+          ? '#e7776b'
+          : 'linear-gradient(180deg, #131318 0%, #1d1d26 100%)',
+      }}
+    >
+      {/* Left column */}
+      <div className="left-col">
+        <div className="photo-ring">
+          <img
+            className="photo"
+            src={emp.imageUrl ? `http://localhost:5001${emp.imageUrl}` : '/images/no-photo.jpg'}
+            alt={emp.EmpName || 'Employee photo'}
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = '/images/no-photo.jpg';
+            }}
+          />
+        </div>
+
+        <div className="photo-meta">
+          <div className="emp-name">{emp.EmpName || '—'}</div>
+          <div className="emp-role">{emp.PersonnelType || 'Employee'}</div>
+          <div className={`status-pill ${normalizedStatus}`}>{rawStatus}</div>
+        </div>
+      </div>
+
+      {/* Separator */}
+      <div className="separator" aria-hidden />
+
+      {/* Right column */}
+      <div className="right-col">
+        <h3 className="profile-title">Profile Details</h3>
+
+        <table className="details-table" aria-label="employee details">
+          <tbody>
+            {/* Always visible */}
+            <tr>
+              <td className="label "><FaUser color='#FFDD00' /> Name</td>
+              <td className="value v-color">{emp.EmpName || '—'}</td>
+            </tr>
+            <tr>
+              <td className="label"><FaIdBadge color='#FFDD00' /> Employee ID</td>
+              <td className="value v-color">{emp.EmployeeID || '—'}</td>
+            </tr>
+            <tr>
+              <td className="label"><FaUserTie color='#FFDD00'/> Manager</td>
+              <td className="value v-color">{emp.Manager_Name || '—'}</td>
+            </tr>
+            <tr>
+              <td className="label"><FaIdCard /> Active Cards</td>
+              <td className="value v-color">{emp.Active_Cards ?? 0}</td>
+            </tr>
+            <tr>
+              <td colSpan="2" style={{ paddingTop: 1 }}>
+                <CurrentLocation empId={emp.id ?? emp.EmployeeID} showMore={showMore} />
+              </td>
+            </tr>
+
+            {/* Hidden until showMore is true */}
+            {showMore && (
+              <>
+                <tr>
+                  <td className="label"><FaClone /> Total Cards</td>
+                  <td className="value">{emp.Total_Cards ?? 0}</td>
+                </tr>
+              </>
+            )}
+          </tbody>
+        </table>
+
+        {/* Toggle Button */}
+        <button
+          className="show-more-btn"
+          onClick={() => setShowMore((prev) => !prev)}
+        >
+          {showMore ? 'Show Less' : 'Show More'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+C:\Users\W0024618\Desktop\employee-verification\frontend\src\components\SearchBar.jsx
+
+
+// C:\Users\W0024618\Desktop\employee-verification\frontend\src\components\SearchBar.jsx
+import React from 'react';
+
+export default function SearchBar({ value, onChange, onSearch }) {
+  return (
+    <div className="search-bar-container">
+      <form
+        onSubmit={e => {
+          e.preventDefault();
+          onSearch();
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Search by Name or EmpID"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          autoComplete="off"
+        />
+        <button type="submit">Search</button>
+      </form>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+C:\Users\W0024618\Desktop\employee-verification\frontend\src\App.css
+
+
+/* App.css */
+
+/* Western Union palette */
+:root {
+  --wu-yellow: #FFCC00;
+  --wu-black:  #000000;
+  --wu-gray:   #f5f5f5;
+}
+
+/* Reset & base */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: var(--wu-gray);
+  color: var(--wu-black);
+}
+
+/* Header base */
+.header {
+  background-color: var(--wu-black);
+  color: var(--wu-yellow);
+  padding: 1.5rem 1rem;
+  border-bottom: 4px solid var(--wu-yellow);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+/* Center all content */
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+}
+
+/* Logo + text alignment */
+.header-logo-text {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Logo styling */
+.logo {
+  height: 48px;
+  width: auto;
+}
+
+/* Typography */
+.header-text h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.2;
+  letter-spacing: 0.4px;
+}
+
+.header-text p {
+  font-size: 1rem;
+  margin: 0;
+  opacity: 0.9;
+}
+
+/* Responsive: slightly scale up on larger screens */
+@media screen and (min-width: 768px) {
+  .header-text h1 {
+    /* font-size: 1rem; */
+  }
+
+  .header-text p {
+    font-size: 1.1rem;
+  }
+}
+/* Main split container */
+.main-container {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: calc(95vh - 160px); /* header + footer */
+}
+
+/* Left panel */
+.left-panel {
+  flex: 1 1 400px;
+  background: #121111;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.left-panel p{
+  color: white;
+}
+/* Right panel */
+.right-panel {
+  flex: 1 1 400px;
+  background-color: var(--wu-yellow);
+  padding: 0;
+   /* background-image: url('/images/u-shape.png');  */
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+/* SearchBar centered */
+/* .search-bar {
+  margin-bottom: 5px;
+  width: 100%;
+  max-width: 400px;
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+.search-bar input {
+  flex: 1;
+  border: 2px solid var(--wu-black);
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 1rem;
+}
+.search-bar button {
+  background-color: var(--wu-yellow);
+  border: none;
+  padding: 8px 12px;
+  margin-left: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+.search-bar button:hover {
+  background-color: #e6b800;
+} */
+
+
+
+
+.search-bar-container {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.search-bar-container form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.search-bar-container input {
+  flex-grow: 1;
+  min-width: 0;
+  padding: 10px;
+  border: 2px solid #FFC72C;
+  border-radius: 6px;
+  font-size: 1rem;
+  outline: none;
+}
+
+.search-bar-container button {
+  padding: 10px 16px;
+  background-color: #FFC72C;
+  color: #000;
+  font-weight: bold;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.search-bar-container button:hover {
+  background-color: #e0b323;
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #1e1e2f;
+  border: 1px solid #444;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.suggestions-dropdown li {
+  padding: 10px;
+  cursor: pointer;
+  color: #fff;
+  transition: background-color 0.2s ease;
+}
+
+.suggestions-dropdown li:hover {
+  background-color: #333;
+}
+
+/* ✅ Responsive fix */
+@media (max-width: 768px) {
+  .search-bar-container form {
+    gap: 1px;
+  }
+
+  .search-bar-container input {
+    font-size: 0.95rem;
+    padding: 8px;
+  }
+
+  .search-bar-container button {
+    font-size: 0.95rem;
+    padding: 8px 12px;
+  }
+
+  .suggestions-dropdown li {
+    font-size: 0.95rem;
+    padding: 8px;
+  }
+}
+/* Infographic Employee Panel */
+.employee-infographic {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  background-color: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+  width: 100%;
+  max-width: 100%;
+  margin-top: 20px;
+}
+.employee-infographic .infographic-image {
+  position: relative;
+}
+.employee-infographic .infographic-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.employee-infographic .infographic-image::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 100%; height: 8px;
+  background-color: var(--wu-yellow);
+}
+.employee-infographic .infographic-details {
+  display: grid;
+  grid-template-rows: auto repeat(4, 1fr);
+}
+.employee-infographic .infographic-details h2 {
+  margin: 16px;
+  text-align: center;
+  font-size: 1.6rem;
+}
+.employee-infographic .infographic-details .info-block {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid #eee;
+}
+.employee-infographic .infographic-details .info-block:nth-child(even) {
+  background-color: #fafafa;
+}
+
+/* Footer */
+.footer {
+  background-color: var(--wu-black);
+  color: var(--wu-yellow);
+  padding: 10px 0;
+  text-align: center;
+  font-size: 0.9rem;
+  position: relative;
+}
+.footer::before {
+  content: '';
+  display: block;
+  height: 4px;
+  background: var(--wu-yellow);
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+
+
+
+/* ---- Conditional Photo Border ---- */
+.employee-infographic .infographic-image {
+  border: 4px solid transparent; /* default */
+}
+.employee-infographic[data-status="Active"] .infographic-image {
+  border-color: #28a745; /* green */
+}
+.employee-infographic[data-status="Deactive"] .infographic-image {
+  border-color: #dc3545; /* red */
+}
+
+
+
+/* ---- Conditional Details-Side Gradient ---- */
+.employee-infographic .infographic-details {
+  /* ensure default stays white */
+  background-color: #fff;
+  position: relative; /* for pseudo-element overlay */
+  overflow: hidden;
+}
+
+/* Active = green gradient on details side */
+.employee-infographic[data-status="Active"] .infographic-details::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(
+    to right,
+    rgba(40, 167, 69, 1) 0%,
+    rgba(40, 167, 69, 0.1) 100%
+  );
+  z-index: 0;
+}
+
+/* Deactive = red gradient on details side */
+.employee-infographic[data-status="Deactive"] .infographic-details::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(
+    to right,
+    rgba(220, 53, 69, 1) 0%,
+    rgba(220, 53, 69, 0.1) 100%
+  );
+  z-index: 0;
+}
+
+/* Keep all your inner text & blocks on top of the gradient */
+.employee-infographic .infographic-details > * {
+  position: relative;
+  z-index: 1;
+}
+
+
+/* ---- Icons in info-block ---- */
+.info-label::before {
+  display: inline-block;
+  width: 1em;
+  margin-right: 0.5em;
+  text-align: center;
+}
+/* Use emojis or replace with real icons */
+.info-label.employee-id::before       { content: "👤"; }
+.info-label.personnel-type::before    { content: "🗂️"; }
+.info-label.manager::before           { content: "👥"; }
+.info-label.manager-wu-id::before     { content: "🆔"; }
+.info-label.employee-status::before   { content: "⚡"; }
+.info-label.profile-disabled::before  { content: "🚫"; }
+.info-label.total-cards::before       { content: "💳"; }
+.info-label.active-cards::before      { content: "✅"; }
+
+/* ---- Search History List ---- */
+.history-list {
+  width: 100%;
+  max-width: 300px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  margin: 20px;
+  padding: 10px;
+}
+.history-list h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  text-align: center;
+}
+.history-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.history-list li {
+  padding: 0px 0px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+}
+.history-list li:last-child {
+  border-bottom: none;
+}
+.history-list li:hover {
+  background-color: #f0f0f0;
+}
+
+/* Suggestions / Related Results */
+.history-list {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  padding: 1px;
+  max-width: 400px;
+  margin: 0px auto;
+}
+.history-list h3 {
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+  text-align: center;
+  color: var(--wu-black);
+}
+.history-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.history-list li {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+}
+.history-list li:last-child {
+  border-bottom: none;
+}
+.history-list li:hover {
+  background-color: #f0f0f0;
+}
+
+
+
+/* Right-panel lists wrapper (updated) */
+.lists-container {
+  display: flex;
+  /* gap: 10px;           reduced gap */
+  padding: 10px;       /* reduced padding */
+}
+
+.lists-container {
+  gap: 15px;    /* tighter gap */
+}
+
+
+/* Each list takes half the width */
+.lists-container .history-list {
+  flex: 1;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  padding: 15px;
+  margin: 0;
+  margin-top: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* Headings */
+.lists-container .history-list h3 {
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+/* List items */
+.lists-container .history-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lists-container .history-list li {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+}
+.lists-container .history-list li:last-child {
+  border-bottom: none;
+}
+.lists-container .history-list li:hover {
+  background-color: #f0f0f0;
+}
+
+
+/* ............... */
+
+
+.stats-grid {
+  /* display: ; */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  margin-top: 1rem;
+}
+.stat-box {
+  background: #000;
+  color: #FFC72C;
+  border: 1px solid #FFC72C;
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+.stat-box h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.stat-box p {
+  margin: 0.5rem 0 0;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+
+/* ==========================
+   Employee Card - Combined CSS
+   ========================== */
+
+/* --- Card Container --- */
+
+.employee-card[data-status="deactive"] {
+  background-color: #FF3131; /* dark red for deactive */
+  border-left: 6px solid #dc3545;
+  color: #fff;
+}
+
+.employee-card {
+  background-color: #000;
+  color: #FFC72C;
+  border: 2px solid #FFC72C;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  max-width: 100%;
+  margin-top: 20px;
+  transition: transform 0.3s ease;
+}
+
+.employee-card:hover {
+  transform: scale(1.01);
+}
+
+/* Border Left Based on Status */
+.employee-card[data-status="active"] {
+  border-left: 6px solid #28a745;
+}
+
+.employee-card[data-status="deactive"] {
+  border-left: 6px solid #040404;
+}
+
+/* Terminated Card Styling */
+.employee-card.terminated {
+  background-color: #8b0000;
+  color: #fff;
+  /* border-left: 6px solid #ff0000; */
+}
+
+/* --- Photo Section --- */
+.card-photo-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  /* background: radial-gradient(circle, #1a1a1a, #000000); */
+  flex: 1;
+  min-width: 280px;
+  max-width: 320px;
+}
+
+.photo-wrapper {
+  position: relative;
+  width: 350px;  
+  height: 350px;
+  /* border-radius: 50%; */
+  /* background: #000; */
+  overflow: hidden;
+  border: 2px solid #FFC72C;
+  box-shadow: 0 0 25px rgba(255, 199, 44, 0.5), 0 0 5px rgba(255, 255, 255, 0.1);
+  transition: transform 0.4s ease;
+}
+
+.photo-wrapper:hover {
+  transform: scale(1.05);
+}
+
+.photo-wrapper img {
+  width: 100%;
+  height: 100%;
+  /* object-fit: contain; */
+  /* border-radius: 50%; */
+  background-color: #111;
+}
+
+/* --- Status Badge --- */
+.status-badge {
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  border-radius: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.status-badge.active {
+  background-color: #28a745;
+}
+
+.status-badge.deactive {
+  background-color: #dc3545;
+}
+
+/* --- Card Details Section --- */
+.card-details {
+  flex: 2;
+  padding: 50px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #000;
+}
+
+.card-details .emp-name {
+  font-size: 1.6rem;
+  margin: 0 0 8px;
+  font-weight: bold;
+  border-bottom: 1px solid #FFC72C;
+  padding-bottom: 4px;
+}
+
+/* --- Info Rows --- */
+.card-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1rem;
+  padding: 6px 0;
+  border-bottom: 1px dashed #444;
+}
+
+.card-info label {
+  color: #000000;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  font-size: 35px;
+}
+
+.card-info span {
+  color: #000;
+  font-weight: 600;
+}
+
+/* --- Colored Icons --- */
+.card-info label .id-icon {
+  color: #1abc9c;
+  margin-right: 8px;
+}
+
+.card-info label .type-icon {
+  color: #3498db;
+  margin-right: 8px;
+}
+
+.card-info label .manager-icon {
+  color: #9b59b6;
+  margin-right: 8px;
+}
+
+.card-info label .wu-icon {
+  color: #f39c12;
+  margin-right: 8px;
+}
+
+.card-info label .status-icon {
+  color: #e74c3c;
+  margin-right: 8px;
+}
+
+.card-info label .card-icon {
+  color: #00b894;
+  margin-right: 8px;
+}
+
+.card-info label .active-icon {
+  color: #2ecc71;
+  margin-right: 8px;
+}
+
+/* --- Responsive --- */
+
+@media screen and (max-width: 768px) {
+  .main-container {
+    flex-direction: column;
+  }
+
+  .left-panel, .right-panel {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .employee-card, .history-list {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .search-bar {
+    flex-direction: column;
+  }
+
+  .search-bar input,
+  .search-bar button {
+    margin: 4px 0;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+  .header{
+    position: relative;
+  }
+  .logo {
+  height: 30px;
+  margin: auto;
+}
+
+
+}
+
+
+
+@media (max-width: 768px) {
+  .employee-card {
+    flex-direction: column;
+  }
+
+  .card-photo-section {
+    max-width: 100%;
+    padding: 16px;
+  }
+
+  .photo-wrapper {
+    width: 160px;
+    height: 160px;
+  }
+
+  .card-details {
+    padding: 12px;
+  }
+
+  .photo-wrapper {
+    width: 290px;
+  height: 290px;
+  }
+}
+
+
+
+/* ............. */
+
+
+.related-results-list {
+  max-height: 200px; /* adjust height so ~7 items fit */
+  overflow-y: auto;
+  padding-right: 5px; /* space for scrollbar */
+}
+
+.related-results-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.related-results-list::-webkit-scrollbar-thumb {
+  background-color: #888;
+  border-radius: 3px;
+}
+
+.related-results-list::-webkit-scrollbar-thumb:hover {
+  background-color: #555;
+}               
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+C:\Users\W0024618\Desktop\employee-verification\frontend\src\App.js
+
+
+// src/App.js
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import SearchBar from './components/SearchBar';
+import EmployeeCard from './components/EmployeeCard';
+import './App.css';
+import wulogo from './assets/img/WU-logo.png';
+
+function App() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [allEmployees, setAllEmployees] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    axios.get('http://localhost:5001/api/employees')
+      .then(res => setAllEmployees(res.data))
+      .catch(() => setError('Failed to load employees'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    axios.get('http://localhost:5001/api/stats')
+      .then(res => setStats(res.data))
+      .catch(err => console.error('❌ Stats load failed', err));
+  }, []);
+
+  // Update Related Results based on searchTerm
+  useEffect(() => {
+    const term = searchTerm.trim().toLowerCase();
+
+    if (!term) {
+      setSuggestions([]);
+      return;
+    }
+
+    const filtered = allEmployees.filter(emp => {
+      if (!emp.EmpName) return false;
+
+      // Check EmployeeID first
+      const id = emp.EmployeeID ? emp.EmployeeID.toLowerCase() : '';
+      if (id.includes(term)) return true;
+
+      // Split name into components
+      const nameParts = emp.EmpName.toLowerCase().split(' ');
+
+      // Check each name component
+      return nameParts.some(part => part.includes(term));
+    });
+
+    setSuggestions(filtered);
+  }, [searchTerm, allEmployees]);
+
+
+
+  const handleSearch = () => {
+    const term = searchTerm.trim().toLowerCase();
+    setError('');
+
+    if (!term) {
+      setSuggestions([]);
+      setSelected(null);
+      return setError('Please enter name or ID');
+    }
+
+    // Find matches - now checking name components
+    const matches = allEmployees.filter(emp => {
+      if (!emp.EmpName) return false;
+
+      // Check ID first
+      const id = emp.EmployeeID ? emp.EmployeeID.toLowerCase() : '';
+      if (id === term) return true;
+
+      // Check name components
+      const nameParts = emp.EmpName.toLowerCase().split(' ');
+      return nameParts.some(part => part === term);
+    });
+
+    if (matches.length === 1) {
+      selectEmployee(matches[0]);
+    } else if (matches.length > 1) {
+      setSuggestions(matches);
+      setError('Multiple matches found - please select one');
+    } else {
+      setSelected(null);
+      setError('No exact matching employee found');
+    }
+  };
+
+  const selectEmployee = emp => {
+    setSelected(emp);
+    setSearchTerm(emp.EmpName || '');
+    setHistory(prev => {
+      if (prev.find(e => e.id === emp.id)) return prev;
+      return [emp, ...prev];
+    });
+  };
+
+  const pickSuggestion = emp => {
+    if (!emp) return;
+    selectEmployee(emp);
+  };
+
+  const pickHistory = emp => {
+    selectEmployee(emp);
+  };
+
+  return (
+    <div>
+      <header className="header">
+        <div className="header-content">
+          <div className="header-logo-text">
+            <img src={wulogo} alt="WU Logo" className="logo" />
+            <div className="header-text">
+              <h1>Associate Verification Tool</h1>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="main-container">
+        <div className="left-panel">
+          <div className="search-bar">
+            <SearchBar
+              value={searchTerm}
+              onChange={setSearchTerm}
+              onSearch={handleSearch}
+            />
+          </div>
+          {loading && <p>Loading…</p>}
+          {error && <p className="error">{error}</p>}
+          {selected && <EmployeeCard emp={selected} />}
+        </div>
+
+        <div className="right-panel">
+          <div className="lists-container">
+
+            {/* <div className="history-list">
+              <h3>Related Results</h3>
+              <ul>
+                {suggestions.length === 0 && <li>No results</li>}
+                {suggestions.map(emp => (
+                  <li key={emp.id} onClick={() => pickSuggestion(emp)}>
+                    {emp.EmpName}{emp.EmployeeID && ` (${emp.EmployeeID})`}
+                  </li>
+                ))}
+              </ul>
+            </div> */}
+
+
+            <div className="history-list">
+              <h3>Related Results</h3>
+              <ul>
+                {suggestions.length === 0 && searchTerm && <li>No matching employees found</li>}
+                {!searchTerm && <li>Start typing to see suggestions</li>}
+                {suggestions.map((emp, idx) => (
+                  <li key={`${emp.EmployeeID ?? emp.EmpName}-${idx}`} onClick={() => pickSuggestion(emp)}>
+                    {emp.EmpName}{emp.EmployeeID && ` (${emp.EmployeeID})`}
+                  </li>
+                ))}
+
+
+              </ul>
+            </div>
+
+            <div className="history-list">
+              <h3>Search History</h3>
+              <ul>
+                {history.map((emp, idx) => (
+                  <li key={`${emp.EmployeeID ?? emp.EmpName}-${idx}`} onClick={() => pickHistory(emp)}>
+                    {emp.EmpName}{emp.EmployeeID && ` (${emp.EmployeeID})`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer
+        style={{
+          backgroundColor: '#000',
+          color: '#FFC72C',
+          padding: '1.5rem 0',
+          textAlign: 'center',
+          marginTop: '0rem',
+          borderTop: '2px solid #FFC72C',
+          fontSize: '0.95rem',
+          lineHeight: '1.6'
+        }}
+      >
+        <div>
+          <strong>Global Security Operations Center</strong>
+          <br />
+          Associate Verification Tool — Western Union
+        </div>
+        <div>
+          Contact us:&nbsp;
+          <a
+            href="mailto:GSOC-GlobalSecurityOperationCenter.SharedMailbox@westernunion.com"
+            style={{ color: '#FFC72C', textDecoration: 'underline' }}
+          >
+            GSOC Mail
+          </a>
+          &nbsp;|&nbsp;
+          Landline:&nbsp;
+          <span style={{ color: '#FFC72C' }}>+91-020-67632394</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+export default App;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+C:\Users\W0024618\Desktop\employee-verification\frontend\public\index.html
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Web site created using create-react-app"
+    />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <!--
+      manifest.json provides metadata used when your web app is installed on a
+      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
+    -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+<!-- <script src="https://cdn.tailwindcss.com"></script> -->
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
+/>
+    <!--
+      Notice the use of %PUBLIC_URL% in the tags above.
+      It will be replaced with the URL of the `public` folder during the build.
+      Only files inside the `public` folder can be referenced from the HTML.
+
+      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
+      work correctly both with client-side routing and a non-root public URL.
+      Learn how to configure a non-root public URL by running `npm run build`.
+    -->
+    <title>React App</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <!--
+      This HTML file is a template.
+      If you open it directly in the browser, you will see an empty page.
+
+      You can add webfonts, meta tags, or analytics to this file.
+      The build step will place the bundled scripts into the <body> tag.
+
+      To begin the development, run `npm start` or `yarn start`.
+      To create a production bundle, use `npm run build` or `yarn build`.
+    -->
+  </body>
+</html>

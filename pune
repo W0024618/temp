@@ -1,163 +1,150 @@
 
-// with pune partition redairect page code here 
 
-// src/components/Header.jsx — APAC Edition
 import React, { useEffect, useState } from 'react';
-import {
-  AppBar, Toolbar, Box, Typography,
-  Select, MenuItem, IconButton
-} from '@mui/material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Container, Navbar, Nav } from 'react-bootstrap';
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { FaSun } from 'react-icons/fa';
 
-import HomeIcon from '@mui/icons-material/Home';
-import HistoryIcon from '@mui/icons-material/History';
-import ListAltIcon from '@mui/icons-material/ListAlt';
+import ZoneDetailsTable from './components/ZoneDetailsTable';
+import DashboardHome    from './pages/DashboardHome';
+import ErtPage          from './pages/ErtPage';
 
-// import wuLogo from '../assets/wu-logo.png';
-import wuLogo from '../assets/images/wu-logo.png';
-import IndiaFlag     from '../assets/flags/india.png';
-import MalaysiaFlag  from '../assets/flags/malaysia.png';
-import PhilippinesFlag from '../assets/flags/philippines.png';
-import TaguigFlag    from '../assets/flags/Taguig.png';
-import JapanFlag     from '../assets/flags/japan.png';
-import DefaultFlag   from '../assets/flags/default.png';
+import './App.css';
 
-import { partitionList } from '../services/occupancy.service';
-import { useLiveOccupancy } from '../hooks/useLiveOccupancy';
-
-
-
-const displayNameMap = {
-  'IN.Pune':         'Pune',
-  'MY.Kuala Lumpur': 'Kuala Lumpur',
-  'PH.Quezon':       'Quezon City',
-  'PH.Taguig':       'Taguig',
-  'JP.Tokyo':        'Tokyo',
-};
-
-
-// Flag lookup by partition code
-const flagMap = {
-  'Pune':         IndiaFlag,
-  'MY.Kuala Lumpur': MalaysiaFlag,
-  'Quezon City':       PhilippinesFlag,
-  'Taguig City':       PhilippinesFlag,
-  'JP.Tokyo':        JapanFlag,
-};
-export default function Header() {
-
- 
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { data } = useLiveOccupancy(1000);
-  const [lastUpdate, setLastUpdate] = useState('');
-
-  useEffect(() => {
-    if (data) setLastUpdate(new Date().toLocaleTimeString());
-  }, [data]);
-
-  const parts = location.pathname.split('/').filter(Boolean);
-  const isPartitionPath = parts[0] === 'partition' && Boolean(parts[1]);
-  const currentPartition = isPartitionPath ? decodeURIComponent(parts[1]) : '';
-  const suffixSegments = isPartitionPath
-    ? parts.slice(2)
-    : parts[0] === 'history'
-      ? ['history']
-      : [];
-
-  const selectedFlag = flagMap[currentPartition];
-
-  const makePartitionPath = (suffix) => {
-    const base = `/partition/${encodeURIComponent(currentPartition)}`;
-    return suffix ? `${base}/${suffix}` : base;
-  };
-
-  const handlePartitionChange = (newPartition) => {
-    if (!newPartition) return navigate('/');
-    
-    // Special handling for Pune partition - only redirect when going to base partition route
-    if (newPartition === 'Pune' && suffixSegments.length === 0) {
-      window.location.href = 'http://10.199.22.57:3011/';
-      return;
-    }
-    
-    const base = `/partition/${encodeURIComponent(newPartition)}`;
-    const full = suffixSegments.length
-      ? `${base}/${suffixSegments.join('/')}`
-      : base;
-    navigate(full);
-  };
-
-
-  // //////////////
+function ZoneDetailsPage({ detailsData }) {
+  const [searchTerm, setSearchTerm] = useState('');
 
   return (
-    <AppBar position="static" color="primary" sx={{ mb: 2 }}>
-      <Toolbar sx={{ justifyContent: 'space-between' }}>
-        {/* Left: Logo + Navigation */}
-        <Box display="flex" alignItems="center">
-          <Box component="img" src={wuLogo} alt="WU" sx={{ height: 36, mr: 2 }} />
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            APAC Occupancy
-            {currentPartition && ` • ${displayNameMap[currentPartition] || currentPartition}`}
-          </Typography>
-
-          {/* Home */}
-     {/* <IconButton color="inherit" onClick={() => navigate(currentPartition ? `/partition/${encodeURIComponent(currentPartition)}` : '/')}>
-            <HomeIcon />
-          </IconButton> */}
-     <IconButton color="inherit" onClick={() => navigate('/')}>
-            <HomeIcon />
-          </IconButton>
-
-          {/* History */}
-          <IconButton color="inherit" onClick={() => navigate(currentPartition ? makePartitionPath('history') : '/history')}>
-            <HistoryIcon />
-          </IconButton>
-
-          {/* Details */}
-          <IconButton
-            color="inherit"
-            onClick={() =>
-              navigate(currentPartition
-                ? makePartitionPath('details')
-                : '/partition/Pune/details'
-              )
-            }
-          >
-            <ListAltIcon />
-          </IconButton>
-        </Box>
-
-        {/* Right: Dropdown Selector + Flag */}
-        <Box display="flex" alignItems="center">
-          <Select
-            size="small"
-            value={currentPartition}
-            displayEmpty
-            onChange={(e) => handlePartitionChange(e.target.value)}
-            sx={{ bgcolor: 'background.paper', mr: 2, minWidth: 150 }}
-            renderValue={(selected) =>
-              selected ? (
-                <Box display="flex" alignItems="center">
-                  <Box component="img" src={flagMap[selected]} alt={selected} sx={{ width: 24, height: 16, mr: 1 }} />
-                  {displayNameMap[selected] || selected}
-                </Box>
-              ) : "— Select Site —"
-            }
-          >
-            <MenuItem value="">— Select Site —</MenuItem>
-            {partitionList.map((p) => (
-              <MenuItem key={p} value={p}>
-                {displayNameMap[p] || p}
-              </MenuItem>
-            ))}
-          </Select>
-        </Box>
-      </Toolbar>
-    </AppBar>
+    <>
+      <div
+        className="d-flex justify-content-between align-items-center mb-2"
+        style={{ flexWrap: 'wrap', gap: '0.5rem' }}
+      >
+        <Link to="/" className="btn btn-secondary">← Back to Dashboard</Link>
+        <input
+          type="text"
+          placeholder="Search employee..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ flexGrow: 1, maxWidth: 300, padding: '0.4rem 0.8rem', fontSize: '1rem', borderRadius: 4, border: '1px solid #ccc' }}
+        />
+      </div>
+      <ZoneDetailsTable data={detailsData} searchTerm={searchTerm} />
+    </>
   );
 }
+
+function App() {
+  const location = useLocation();
+  const headerText = location.pathname === '/ert'
+    ? 'Emergency Response Team — Western Union Pune'
+    : 'Live Occupancy — Western Union Pune';
+
+  // Single state object for the entire payload
+  const [liveData, setLiveData] = useState({
+    summary: [],
+    details: {},
+    floorBreakdown: [],
+    zoneBreakdown: [],
+    personnelBreakdown: [],
+    totalVisitedToday: 0,
+    personnelSummary: { employees: 0, contractors: 0 },
+    visitedToday: { employees: 0, contractors: 0, total: 0 },
+    ertStatus: {}
+  });
+
+  useEffect(() => {
+    const es = new EventSource('http://localhost:5000/api/live-occupancy');
+
+    es.onmessage = (e) => {
+      try {
+        const p = JSON.parse(e.data);
+        // Batch-update entire payload in one setState
+        setLiveData({
+          summary: Array.isArray(p.summary) ? p.summary : [],
+          details: p.details || {},
+          floorBreakdown: Array.isArray(p.floorBreakdown) ? p.floorBreakdown : [],
+          zoneBreakdown: Array.isArray(p.zoneBreakdown) ? p.zoneBreakdown : [],
+          personnelBreakdown: Array.isArray(p.personnelBreakdown) ? p.personnelBreakdown : [],
+          totalVisitedToday: typeof p.totalVisitedToday === 'number' ? p.totalVisitedToday : 0,
+          personnelSummary: p.personnelSummary || { employees: 0, contractors: 0 },
+          visitedToday: p.visitedToday || { employees: 0, contractors: 0, total: 0 },
+          ertStatus: p.ertStatus || {}
+        });
+      } catch {
+        console.error('SSE parse error');
+      }
+    };
+
+    es.onerror = (err) => {
+      console.error('SSE error', err);
+      es.close();
+    };
+
+    return () => es.close();
+  }, []);
+
+  return (
+    <>
+      <Navbar bg="dark" variant="dark" expand="lg" className="px-4">
+        <Navbar.Brand as={Link} to="/" className="wu-brand">{headerText}</Navbar.Brand>
+        <Nav className="ms-auto align-items-center">
+          <Nav.Link as={Link} to="/" className="nav-item-infographic"><i class="bi bi-house"></i></Nav.Link>
+          <Nav.Link href="http://10.199.22.57:3000/partition/Pune/history"  className="nav-item-infographic"><i class="bi bi-clock-history"></i></Nav.Link>
+          <Nav.Link as={Link} to="/details" className="nav-item-infographic"><i class="fa-solid fa-calendar-day"></i></Nav.Link>
+          <Nav.Link as={Link} to="/ert" className="nav-item-infographic">ERT Overview</Nav.Link>
+          <Nav.Link className="theme-toggle-icon" title="Dark mode only"><FaSun/></Nav.Link>
+        </Nav>
+      </Navbar>
+
+      <Container fluid className="mt-2">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <DashboardHome
+                summaryData={liveData.summary}
+                detailsData={liveData.details}
+                floorData={liveData.floorBreakdown}
+                zoneBreakdown={liveData.zoneBreakdown}
+                personnelBreakdown={liveData.personnelBreakdown}
+                totalVisitedToday={liveData.totalVisitedToday}
+                personnelSummary={liveData.personnelSummary}
+                visitedToday={liveData.visitedToday}
+                ertStatus={liveData.ertStatus}
+              />
+            }
+          />
+          <Route path="/details" element={<ZoneDetailsPage detailsData={liveData.details} />} />
+          <Route path="/ert"     element={<ErtPage ertStatus={liveData.ertStatus} />} />
+        </Routes>
+      </Container>
+    </>
+  );
+}
+
+export default function WrappedApp() {
+  return (
+    <BrowserRouter>
+      <div className="dark-theme">
+        <App />
+      </div>
+    </BrowserRouter>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

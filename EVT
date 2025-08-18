@@ -1,3 +1,15 @@
+GET http://localhost:5001/api/stats
+ 
+GET http://localhost:5001/api/stats?details=ActiveProfiles&page=1&limit=50
+ 
+GET http://localhost:5001/api/stats?details=ActiveProfiles&q=Anushka
+ 
+ 
+GET http://localhost:5001/api/stats?details=ActiveProfiles&pType=Contractor&page=1&limit=100
+
+
+
+
 
 // controllers/employeeController.js
 const { getPool } = require('../config/db');

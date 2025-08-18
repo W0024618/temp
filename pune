@@ -1,857 +1,164 @@
-Read below file carefully and fix this issue Quickly
-ailed to load resource: the server responded with a status of 404 (Not Found)Understand this error
-App.js:204 ❌ Stats load failed AxiosErrorcode: "ERR_BAD_REQUEST"config: {transitional: {…}, adapter: Array(3), transformRequest: Array(1), transformResponse: Array(1), timeout: 0, …}message: "Request failed with status code 404"name: "AxiosError"request: XMLHttpRequest {onreadystatechange: null, readyState: 4, timeout: 0, withCredentials: false, upload: XMLHttpRequestUpload, …}response: config: {transitional: {…}, adapter: Array(3), transformRequest: Array(1), transformResponse: Array(1), timeout: 0, …}data: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /api/stats</pre>\n</body>\n</html>\n"headers: AxiosHeaders {content-length: '148', content-type: 'text/html; charset=utf-8'}request: XMLHttpRequest {onreadystatechange: null, readyState: 4, timeout: 0, withCredentials: false, upload: XMLHttpRequestUpload, …}status: 404statusText: "Not Found"[[Prototype]]: Objectstatus: 404stack: "AxiosError: Request failed with status code 404\n    at settle (http://10.199.22.57:3004/static/js/bundle.js:55408:12)\n    at XMLHttpRequest.onloadend (http://10.199.22.57:3004/static/js/bundle.js:54035:66)\n    at Axios.request (http://10.199.22.57:3004/static/js/bundle.js:54534:41)"[[Prototype]]: Error
-(anonymous) @ App.js:204Understand this error
-:5001/api/stats:1  Failed to load resource: the server responded with a status of 404 (Not Found)Understand this error
-App.js:204 ❌ Stats load failed AxiosError
-(anonymous) @ App.js:204Understand this error
-CurrentLocation.jsx:26  GET http://10.199.22.57:3004/api/employees/2097193776/location 404 (Not Found)
-dispatchXhrRequest @ xhr.js:195
-xhr @ xhr.js:15
-dispatchRequest @ dispatchRequest.js:51
-_request @ Axios.js:187
-request @ Axios.js:40
-Axios.<computed> @ Axios.js:213
-wrap @ bind.js:5
-(anonymous) @ CurrentLocation.jsx:26
-react-stack-bottom-frame @ react-dom-client.development.js:23949
-runWithFiberInDEV @ react-dom-client.development.js:1518
-commitHookEffectListMount @ react-dom-client.development.js:11886
-commitHookPassiveMountEffects @ react-dom-client.development.js:12024
-commitPassiveMountOnFiber @ react-dom-client.development.js:13840
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13834
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13834
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13853
-flushPassiveEffects @ react-dom-client.development.js:15737
-flushPendingEffects @ react-dom-client.development.js:15702
-flushSpawnedWork @ react-dom-client.development.js:15668
-commitRoot @ react-dom-client.development.js:15403
-commitRootWhenReady @ react-dom-client.development.js:14652
-performWorkOnRoot @ react-dom-client.development.js:14575
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245
-<CurrentLocation>
-exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
-EmployeeCard @ EmployeeCard.jsx:150
-react-stack-bottom-frame @ react-dom-client.development.js:23863
-renderWithHooksAgain @ react-dom-client.development.js:5629
-renderWithHooks @ react-dom-client.development.js:5541
-updateFunctionComponent @ react-dom-client.development.js:8897
-beginWork @ react-dom-client.development.js:10522
-runWithFiberInDEV @ react-dom-client.development.js:1518
-performUnitOfWork @ react-dom-client.development.js:15130
-workLoopSync @ react-dom-client.development.js:14956
-renderRootSync @ react-dom-client.development.js:14936
-performWorkOnRoot @ react-dom-client.development.js:14417
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245
-<EmployeeCard>
-exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
-App @ App.js:312
-react-stack-bottom-frame @ react-dom-client.development.js:23863
-renderWithHooksAgain @ react-dom-client.development.js:5629
-renderWithHooks @ react-dom-client.development.js:5541
-updateFunctionComponent @ react-dom-client.development.js:8897
-beginWork @ react-dom-client.development.js:10522
-runWithFiberInDEV @ react-dom-client.development.js:1518
-performUnitOfWork @ react-dom-client.development.js:15130
-workLoopSync @ react-dom-client.development.js:14956
-renderRootSync @ react-dom-client.development.js:14936
-performWorkOnRoot @ react-dom-client.development.js:14417
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245Understand this error
-CurrentLocation.jsx:26  GET http://10.199.22.57:3004/api/employees/2097193776/location 404 (Not Found)
-dispatchXhrRequest @ xhr.js:195
-xhr @ xhr.js:15
-dispatchRequest @ dispatchRequest.js:51
-_request @ Axios.js:187
-request @ Axios.js:40
-Axios.<computed> @ Axios.js:213
-wrap @ bind.js:5
-(anonymous) @ CurrentLocation.jsx:26
-react-stack-bottom-frame @ react-dom-client.development.js:23949
-runWithFiberInDEV @ react-dom-client.development.js:1518
-commitHookEffectListMount @ react-dom-client.development.js:11886
-commitHookPassiveMountEffects @ react-dom-client.development.js:12024
-reconnectPassiveEffects @ react-dom-client.development.js:14004
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:13997
-doubleInvokeEffectsOnFiber @ react-dom-client.development.js:15964
-runWithFiberInDEV @ react-dom-client.development.js:1518
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-commitDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15977
-flushPassiveEffects @ react-dom-client.development.js:15747
-flushPendingEffects @ react-dom-client.development.js:15702
-flushSpawnedWork @ react-dom-client.development.js:15668
-commitRoot @ react-dom-client.development.js:15403
-commitRootWhenReady @ react-dom-client.development.js:14652
-performWorkOnRoot @ react-dom-client.development.js:14575
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245
-<CurrentLocation>
-exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
-EmployeeCard @ EmployeeCard.jsx:150
-react-stack-bottom-frame @ react-dom-client.development.js:23863
-renderWithHooksAgain @ react-dom-client.development.js:5629
-renderWithHooks @ react-dom-client.development.js:5541
-updateFunctionComponent @ react-dom-client.development.js:8897
-beginWork @ react-dom-client.development.js:10522
-runWithFiberInDEV @ react-dom-client.development.js:1518
-performUnitOfWork @ react-dom-client.development.js:15130
-workLoopSync @ react-dom-client.development.js:14956
-renderRootSync @ react-dom-client.development.js:14936
-performWorkOnRoot @ react-dom-client.development.js:14417
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245
-<EmployeeCard>
-exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
-App @ App.js:312
-react-stack-bottom-frame @ react-dom-client.development.js:23863
-renderWithHooksAgain @ react-dom-client.development.js:5629
-renderWithHooks @ react-dom-client.development.js:5541
-updateFunctionComponent @ react-dom-client.development.js:8897
-beginWork @ react-dom-client.development.js:10522
-runWithFiberInDEV @ react-dom-client.development.js:1518
-performUnitOfWork @ react-dom-client.development.js:15130
-workLoopSync @ react-dom-client.development.js:14956
-renderRootSync @ react-dom-client.development.js:14936
-performWorkOnRoot @ react-dom-client.development.js:14417
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245Understand this error
-CurrentLocation.jsx:34 Location load error Request failed with status code 404
-(anonymous) @ CurrentLocation.jsx:34
-Promise.catch
-(anonymous) @ CurrentLocation.jsx:31
-react-stack-bottom-frame @ react-dom-client.development.js:23949
-runWithFiberInDEV @ react-dom-client.development.js:1518
-commitHookEffectListMount @ react-dom-client.development.js:11886
-commitHookPassiveMountEffects @ react-dom-client.development.js:12024
-reconnectPassiveEffects @ react-dom-client.development.js:14004
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:14051
-recursivelyTraverseReconnectPassiveEffects @ react-dom-client.development.js:13975
-reconnectPassiveEffects @ react-dom-client.development.js:13997
-doubleInvokeEffectsOnFiber @ react-dom-client.development.js:15964
-runWithFiberInDEV @ react-dom-client.development.js:1518
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-recursivelyTraverseAndDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15925
-commitDoubleInvokeEffectsInDEV @ react-dom-client.development.js:15977
-flushPassiveEffects @ react-dom-client.development.js:15747
-flushPendingEffects @ react-dom-client.development.js:15702
-flushSpawnedWork @ react-dom-client.development.js:15668
-commitRoot @ react-dom-client.development.js:15403
-commitRootWhenReady @ react-dom-client.development.js:14652
-performWorkOnRoot @ react-dom-client.development.js:14575
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245
-<CurrentLocation>
-exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
-EmployeeCard @ EmployeeCard.jsx:150
-react-stack-bottom-frame @ react-dom-client.development.js:23863
-renderWithHooksAgain @ react-dom-client.development.js:5629
-renderWithHooks @ react-dom-client.development.js:5541
-updateFunctionComponent @ react-dom-client.development.js:8897
-beginWork @ react-dom-client.development.js:10522
-runWithFiberInDEV @ react-dom-client.development.js:1518
-performUnitOfWork @ react-dom-client.development.js:15130
-workLoopSync @ react-dom-client.development.js:14956
-renderRootSync @ react-dom-client.development.js:14936
-performWorkOnRoot @ react-dom-client.development.js:14417
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245
-<EmployeeCard>
-exports.jsxDEV @ react-jsx-dev-runtime.development.js:336
-App @ App.js:312
-react-stack-bottom-frame @ react-dom-client.development.js:23863
-renderWithHooksAgain @ react-dom-client.development.js:5629
-renderWithHooks @ react-dom-client.development.js:5541
-updateFunctionComponent @ react-dom-client.development.js:8897
-beginWork @ react-dom-client.development.js:10522
-runWithFiberInDEV @ react-dom-client.development.js:1518
-performUnitOfWork @ react-dom-client.development.js:15130
-workLoopSync @ react-dom-client.development.js:14956
-renderRootSync @ react-dom-client.development.js:14936
-performWorkOnRoot @ react-dom-client.development.js:14417
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245Understand this error
-CurrentLocation.jsx:26  GET http://10.199.22.57:3004/api/employees/2097207990/location 404 (Not Found)
-dispatchXhrRequest @ xhr.js:195
-xhr @ xhr.js:15
-dispatchRequest @ dispatchRequest.js:51
-_request @ Axios.js:187
-request @ Axios.js:40
-Axios.<computed> @ Axios.js:213
-wrap @ bind.js:5
-(anonymous) @ CurrentLocation.jsx:26
-react-stack-bottom-frame @ react-dom-client.development.js:23949
-runWithFiberInDEV @ react-dom-client.development.js:1518
-commitHookEffectListMount @ react-dom-client.development.js:11886
-commitHookPassiveMountEffects @ react-dom-client.development.js:12024
-commitPassiveMountOnFiber @ react-dom-client.development.js:13840
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13834
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13834
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13853
-flushPassiveEffects @ react-dom-client.development.js:15737
-flushPendingEffects @ react-dom-client.development.js:15702
-flushSpawnedWork @ react-dom-client.development.js:15668
-commitRoot @ react-dom-client.development.js:15403
-commitRootWhenReady @ react-dom-client.development.js:14652
-performWorkOnRoot @ react-dom-client.development.js:14575
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245Understand this error
-CurrentLocation.jsx:34 Location load error Request failed with status code 404
-(anonymous) @ CurrentLocation.jsx:34
-Promise.catch
-(anonymous) @ CurrentLocation.jsx:31
-react-stack-bottom-frame @ react-dom-client.development.js:23949
-runWithFiberInDEV @ react-dom-client.development.js:1518
-commitHookEffectListMount @ react-dom-client.development.js:11886
-commitHookPassiveMountEffects @ react-dom-client.development.js:12024
-commitPassiveMountOnFiber @ react-dom-client.development.js:13840
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13834
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13834
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13957
-recursivelyTraversePassiveMountEffects @ react-dom-client.development.js:13813
-commitPassiveMountOnFiber @ react-dom-client.development.js:13853
-flushPassiveEffects @ react-dom-client.development.js:15737
-flushPendingEffects @ react-dom-client.development.js:15702
-flushSpawnedWork @ react-dom-client.development.js:15668
-commitRoot @ react-dom-client.development.js:15403
-commitRootWhenReady @ react-dom-client.development.js:14652
-performWorkOnRoot @ react-dom-client.development.js:14575
-performSyncWorkOnRoot @ react-dom-client.development.js:16231
-flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:16068
-processRootScheduleInMicrotask @ react-dom-client.development.js:16116
-(anonymous) @ react-dom-client.development.js:16245Understand this error
 
+// with pune partition redairect page code here 
 
-
-D:\DASHBOARD\employee-verification\frontend\src\components\CurrentLocation.jsx
-
+// src/components/Header.jsx — APAC Edition
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { FaMapMarkerAlt, FaPalette, FaCalendarAlt, FaClock, FaDoorClosed, FaExchangeAlt } from 'react-icons/fa';
-import './EmployeeCard.css';
-export default function CurrentLocation({ empId, showMore }) {
-  const [loading, setLoading] = useState(false);
-  const [loc, setLoc] = useState(null);
-  const [error, setError] = useState('');
+import {
+  AppBar, Toolbar, Box, Typography,
+  Select, MenuItem, IconButton
+} from '@mui/material';
+import { useNavigate, useLocation } from 'react-router-dom';
+
+import HomeIcon from '@mui/icons-material/Home';
+import HistoryIcon from '@mui/icons-material/History';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+
+// import wuLogo from '../assets/wu-logo.png';
+import wuLogo from '../assets/images/wu-logo.png';
+import IndiaFlag     from '../assets/flags/india.png';
+import MalaysiaFlag  from '../assets/flags/malaysia.png';
+import PhilippinesFlag from '../assets/flags/philippines.png';
+import TaguigFlag    from '../assets/flags/Taguig.png';
+import JapanFlag     from '../assets/flags/japan.png';
+import DefaultFlag   from '../assets/flags/default.png';
+
+import { partitionList } from '../services/occupancy.service';
+import { useLiveOccupancy } from '../hooks/useLiveOccupancy';
+
+
+
+const displayNameMap = {
+  'IN.Pune':         'Pune',
+  'MY.Kuala Lumpur': 'Kuala Lumpur',
+  'PH.Quezon':       'Quezon City',
+  'PH.Taguig':       'Taguig',
+  'JP.Tokyo':        'Tokyo',
+};
+
+
+// Flag lookup by partition code
+const flagMap = {
+  'Pune':         IndiaFlag,
+  'MY.Kuala Lumpur': MalaysiaFlag,
+  'Quezon City':       PhilippinesFlag,
+  'Taguig City':       PhilippinesFlag,
+  'JP.Tokyo':        JapanFlag,
+};
+export default function Header() {
+
+ 
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data } = useLiveOccupancy(1000);
+  const [lastUpdate, setLastUpdate] = useState('');
 
   useEffect(() => {
-    if (!empId) {
-      setLoc(null);
-      setError('');
-      return;
-    }
+    if (data) setLastUpdate(new Date().toLocaleTimeString());
+  }, [data]);
 
-    let cancelled = false;
-    setLoading(true);
-    setError('');
-    setLoc(null);
+  const parts = location.pathname.split('/').filter(Boolean);
+  const isPartitionPath = parts[0] === 'partition' && Boolean(parts[1]);
+  const currentPartition = isPartitionPath ? decodeURIComponent(parts[1]) : '';
+  const suffixSegments = isPartitionPath
+    ? parts.slice(2)
+    : parts[0] === 'history'
+      ? ['history']
+      : [];
 
+  const selectedFlag = flagMap[currentPartition];
 
+  const makePartitionPath = (suffix) => {
+    const base = `/partition/${encodeURIComponent(currentPartition)}`;
+    return suffix ? `${base}/${suffix}` : base;
+  };
 
-
+  const handlePartitionChange = (newPartition) => {
+    if (!newPartition) return navigate('/');
     
-    axios
-      .get(`http://10.199.22.57:5001/api/employees/${empId}/location`)
-      .then((res) => {
-        if (cancelled) return;
-        setLoc(res.data);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('Location load error', err?.message || err);
-        setError('Failed to load location');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [empId]);
-
-  if (!empId) return null;
-
-  return (
-    <div className="current-location-card" style={{ marginTop: 1 }}>
-      <h4 style={{ margin: '0 0 6px 0', fontSize: 14, color: '#f5a742' }}>Swipe Details</h4>
-
-      {loading && <div style={{ color: '#fff' }}>Loading location…</div>}
-      {error && <div style={{ color: '#fff' }}>{error}</div>}
-
-      {!loading && loc && !loc.found && (
-        <div style={{ color: '#2ced0e' }}>No recent swipe</div>
-      )}
-
-      {!loading && loc && loc.found && (
-
-
-        <table className="swipe-details-table">
-          <tbody>
-            <tr>
-              <td className="label"><FaMapMarkerAlt className="icon location" /> Location</td>
-              <td className="value">
-                {loc.partition || '—'}
-                {loc.floor ? ` · ${loc.floor}` : ''}
-              </td>
-            </tr>
-
-
-            <tr>
-              <td className="label">
-                <FaPalette className="icon zone" /> {loc.Zone ? 'Zone' : 'Floor'}
-              </td>
-              <td className="value">
-                {loc.Zone || loc.floor || '—'}
-              </td>
-            </tr>
-
-            {showMore && (
-              <>
-
-
-                <tr>
-                  <td className="label"><FaCalendarAlt className="icon date" /> Date</td>
-                  <td className="value">
-                    {loc.timestampUTC
-                      ? loc.timestampUTC.split('T')[0] // "2025-08-14"
-                      : '—'}
-                  </td>
-                </tr>
-
-
-
-                <tr>
-                  <td className="label"><FaClock className="icon time" /> Time</td>
-                  <td className="value">
-                    {loc.timestampUTC
-                      ? new Date(
-                        `1970-01-01T${loc.timestampUTC.split('T')[1].replace('Z', '')}Z`
-                      ).toLocaleTimeString([], {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true,
-                        timeZone: 'UTC'   // <- keep it in UTC so it shows "4:21 PM"
-                      })
-                      : '—'}
-                  </td>
-                </tr>
-
-
-                <tr>
-                  <td className="label"><FaDoorClosed className="icon door" /> Door</td>
-                  <td className="value">{loc.door || '—'}</td>
-                </tr>
-                <tr>
-                  <td className="label"><FaExchangeAlt className="icon direction" /> Direction</td>
-                  <td className="value">{loc.direction || '—'}</td>
-                </tr>
-              </>
-            )}
-          </tbody>
-        </table>
-
-      )}
-    </div>
-  );
-}
-
-
-
-
-
-
-
-
-// C:\Users\W0024618\Desktop\employee-verification\frontend\src\components\EmployeeCard.jsx
-import React, { useState } from 'react';
-import { FaUser, FaIdBadge, FaUserTie, FaIdCard, FaCheckCircle, FaClone } from 'react-icons/fa';
-import CurrentLocation from './CurrentLocation';
-import './EmployeeCard.css';
-
-export default function EmployeeCard({ emp }) {
-  const [showMore, setShowMore] = useState(false);
-
-  if (!emp) return null;
-
-  const rawStatus = emp.Employee_Status || 'Deactive';
-  const normalizedStatus = rawStatus.trim().toLowerCase();
-  const isRedStatus =
-    normalizedStatus === 'deactive' || normalizedStatus === 'terminated';
-
-  return (
-    <div
-      className="employee-card-container"
-      data-status={normalizedStatus}
-      style={{
-        background: isRedStatus
-          ? '#e7776b'
-          : 'linear-gradient(180deg, #131318 0%, #1d1d26 100%)',
-      }}
-    >
-      {/* Left column */}
-      <div className="left-col">
-        <div className="photo-ring">
-          <img
-            className="photo"
-            src={emp.imageUrl ? `http://10.199.22.57:5001${emp.imageUrl}` : '/images/no-photo.jpg'}
-            alt={emp.EmpName || 'Employee photo'}
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src = '/images/no-photo.jpg';
-            }}
-          />
-        </div>
-
-        <div className="photo-meta">
-          <div className="emp-name">{emp.EmpName || '—'}</div>
-          <div className="emp-role">{emp.PersonnelType || 'Employee'}</div>
-          <div className={`status-pill ${normalizedStatus}`}>{rawStatus}</div>
-        </div>
-      </div>
-
-      {/* Separator */}
-      <div className="separator" aria-hidden />
-
-      {/* Right column */}
-      <div className="right-col">
-        <h3 className="profile-title">Profile Details</h3>
-
-        <table className="details-table" aria-label="employee details">
-          <tbody>
-            {/* Always visible */}
-            <tr>
-              <td className="label "><FaUser color='#FFDD00' /> Name</td>
-              <td className="value v-color">{emp.EmpName || '—'}</td>
-            </tr>
-            <tr>
-              <td className="label"><FaIdBadge color='#FFDD00' /> Employee ID</td>
-              <td className="value v-color">{emp.EmployeeID || '—'}</td>
-            </tr>
-            <tr>
-              <td className="label"><FaUserTie color='#FFDD00'/> Manager</td>
-              <td className="value v-color">{emp.Manager_Name || '—'}</td>
-            </tr>
-            <tr>
-              <td className="label"><FaIdCard /> Active Cards</td>
-              <td className="value v-color">{emp.Active_Cards ?? 0}</td>
-            </tr>
-            <tr>
-              <td colSpan="2" style={{ paddingTop: 1 }}>
-                <CurrentLocation empId={emp.id ?? emp.EmployeeID} showMore={showMore} />
-              </td>
-            </tr>
-
-            {/* Hidden until showMore is true */}
-            {showMore && (
-              <>
-                <tr>
-                  <td className="label"><FaClone /> Total Cards</td>
-                  <td className="value">{emp.Total_Cards ?? 0}</td>
-                </tr>
-              </>
-            )}
-          </tbody>
-        </table>
-
-        {/* Toggle Button */}
-        <button
-          className="show-more-btn"
-          onClick={() => setShowMore((prev) => !prev)}
-        >
-          {showMore ? 'Show Less' : 'Show More'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-
-
-
-
-
-
-
-
-
-// src/App.js
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import SearchBar from './components/SearchBar';
-import EmployeeCard from './components/EmployeeCard';
-import './App.css';
-import wulogo from './assets/img/WU-logo.png';
-
-function App() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [allEmployees, setAllEmployees] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [stats, setStats] = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    axios.get('http://10.199.22.57:5001/api/employees') //http://10.199.22.57:5001/api/employees
-      .then(res => setAllEmployees(res.data))
-      .catch(() => setError('Failed to load employees'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    axios.get('http://10.199.22.57:5001/api/stats')
-      .then(res => setStats(res.data))
-      .catch(err => console.error('❌ Stats load failed', err));
-  }, []);
-
-  // Update Related Results based on searchTerm
-  useEffect(() => {
-    const term = searchTerm.trim().toLowerCase();
-
-    if (!term) {
-      setSuggestions([]);
+    // Special handling for Pune partition - only redirect when going to base partition route
+    if (newPartition === 'Pune' && suffixSegments.length === 0) {
+      window.location.href = 'http://10.199.22.57:3011/';
       return;
     }
-
-    const filtered = allEmployees.filter(emp => {
-      if (!emp.EmpName) return false;
-
-      // Check EmployeeID first
-      const id = emp.EmployeeID ? emp.EmployeeID.toLowerCase() : '';
-      if (id.includes(term)) return true;
-
-      // Split name into components
-      const nameParts = emp.EmpName.toLowerCase().split(' ');
-
-      // Check each name component
-      return nameParts.some(part => part.includes(term));
-    });
-
-    setSuggestions(filtered);
-  }, [searchTerm, allEmployees]);
-
-
-
-  const handleSearch = () => {
-    const term = searchTerm.trim().toLowerCase();
-    setError('');
-
-    if (!term) {
-      setSuggestions([]);
-      setSelected(null);
-      return setError('Please enter name or ID');
-    }
-
-    // Find matches - now checking name components
-    const matches = allEmployees.filter(emp => {
-      if (!emp.EmpName) return false;
-
-      // Check ID first
-      const id = emp.EmployeeID ? emp.EmployeeID.toLowerCase() : '';
-      if (id === term) return true;
-
-      // Check name components
-      const nameParts = emp.EmpName.toLowerCase().split(' ');
-      return nameParts.some(part => part === term);
-    });
-
-    if (matches.length === 1) {
-      selectEmployee(matches[0]);
-    } else if (matches.length > 1) {
-      setSuggestions(matches);
-      setError('Multiple matches found - please select one');
-    } else {
-      setSelected(null);
-      setError('No exact matching employee found');
-    }
+    
+    const base = `/partition/${encodeURIComponent(newPartition)}`;
+    const full = suffixSegments.length
+      ? `${base}/${suffixSegments.join('/')}`
+      : base;
+    navigate(full);
   };
 
-  const selectEmployee = emp => {
-    setSelected(emp);
-    setSearchTerm(emp.EmpName || '');
-    setHistory(prev => {
-      if (prev.find(e => e.id === emp.id)) return prev;
-      return [emp, ...prev];
-    });
-  };
 
-  const pickSuggestion = emp => {
-    if (!emp) return;
-    selectEmployee(emp);
-  };
-
-  const pickHistory = emp => {
-    selectEmployee(emp);
-  };
+  // //////////////
 
   return (
-    <div>
-      <header className="header">
-        <div className="header-content">
-          <div className="header-logo-text">
-            <img src={wulogo} alt="WU Logo" className="logo" />
-            <div className="header-text">
-              <h1>Associate Verification Tool</h1>
-            </div>
-          </div>
-        </div>
-      </header>
+    <AppBar position="static" color="primary" sx={{ mb: 2 }}>
+      <Toolbar sx={{ justifyContent: 'space-between' }}>
+        {/* Left: Logo + Navigation */}
+        <Box display="flex" alignItems="center">
+          <Box component="img" src={wuLogo} alt="WU" sx={{ height: 36, mr: 2 }} />
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            APAC Occupancy
+            {currentPartition && ` • ${displayNameMap[currentPartition] || currentPartition}`}
+          </Typography>
 
-      <div className="main-container">
-        <div className="left-panel">
-          <div className="search-bar">
-            <SearchBar
-              value={searchTerm}
-              onChange={setSearchTerm}
-              onSearch={handleSearch}
-            />
-          </div>
-          {loading && <p>Loading…</p>}
-          {error && <p className="error">{error}</p>}
-          {selected && <EmployeeCard emp={selected} />}
-        </div>
+          {/* Home */}
+     {/* <IconButton color="inherit" onClick={() => navigate(currentPartition ? `/partition/${encodeURIComponent(currentPartition)}` : '/')}>
+            <HomeIcon />
+          </IconButton> */}
+     <IconButton color="inherit" onClick={() => navigate('/')}>
+            <HomeIcon />
+          </IconButton>
 
-        <div className="right-panel">
-          <div className="lists-container">
+          {/* History */}
+          <IconButton color="inherit" onClick={() => navigate(currentPartition ? makePartitionPath('history') : '/history')}>
+            <HistoryIcon />
+          </IconButton>
 
-            {/* <div className="history-list">
-              <h3>Related Results</h3>
-              <ul>
-                {suggestions.length === 0 && <li>No results</li>}
-                {suggestions.map(emp => (
-                  <li key={emp.id} onClick={() => pickSuggestion(emp)}>
-                    {emp.EmpName}{emp.EmployeeID && ` (${emp.EmployeeID})`}
-                  </li>
-                ))}
-              </ul>
-            </div> */}
-
-
-            <div className="history-list">
-              <h3>Related Results</h3>
-              <ul>
-                {suggestions.length === 0 && searchTerm && <li>No matching employees found</li>}
-                {!searchTerm && <li>Start typing to see suggestions</li>}
-                {suggestions.map((emp, idx) => (
-                  <li key={`${emp.EmployeeID ?? emp.EmpName}-${idx}`} onClick={() => pickSuggestion(emp)}>
-                    {emp.EmpName}{emp.EmployeeID && ` (${emp.EmployeeID})`}
-                  </li>
-                ))}
-
-
-              </ul>
-            </div>
-
-            <div className="history-list">
-              <h3>Search History</h3>
-              <ul>
-                {history.map((emp, idx) => (
-                  <li key={`${emp.EmployeeID ?? emp.EmpName}-${idx}`} onClick={() => pickHistory(emp)}>
-                    {emp.EmpName}{emp.EmployeeID && ` (${emp.EmployeeID})`}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <footer
-        style={{
-          backgroundColor: '#000',
-          color: '#FFC72C',
-          padding: '1.5rem 0',
-          textAlign: 'center',
-          marginTop: '0rem',
-          borderTop: '2px solid #FFC72C',
-          fontSize: '0.95rem',
-          lineHeight: '1.6'
-        }}
-      >
-        <div>
-          <strong>Global Security Operations Center</strong>
-          <br />
-          Associate Verification Tool — Western Union
-        </div>
-        <div>
-          Contact us:&nbsp;
-          <a
-            href="mailto:GSOC-GlobalSecurityOperationCenter.SharedMailbox@westernunion.com"
-            style={{ color: '#FFC72C', textDecoration: 'underline' }}
+          {/* Details */}
+          <IconButton
+            color="inherit"
+            onClick={() =>
+              navigate(currentPartition
+                ? makePartitionPath('details')
+                : '/partition/Pune/details'
+              )
+            }
           >
-            GSOC Mail
-          </a>
-          &nbsp;|&nbsp;
-          Landline:&nbsp;
-          <span style={{ color: '#FFC72C' }}>+91-020-67632394</span>
-        </div>
-      </footer>
-    </div>
+            <ListAltIcon />
+          </IconButton>
+        </Box>
+
+        {/* Right: Dropdown Selector + Flag */}
+        <Box display="flex" alignItems="center">
+          <Select
+            size="small"
+            value={currentPartition}
+            displayEmpty
+            onChange={(e) => handlePartitionChange(e.target.value)}
+            sx={{ bgcolor: 'background.paper', mr: 2, minWidth: 150 }}
+            renderValue={(selected) =>
+              selected ? (
+                <Box display="flex" alignItems="center">
+                  <Box component="img" src={flagMap[selected]} alt={selected} sx={{ width: 24, height: 16, mr: 1 }} />
+                  {displayNameMap[selected] || selected}
+                </Box>
+              ) : "— Select Site —"
+            }
+          >
+            <MenuItem value="">— Select Site —</MenuItem>
+            {partitionList.map((p) => (
+              <MenuItem key={p} value={p}>
+                {displayNameMap[p] || p}
+              </MenuItem>
+            ))}
+          </Select>
+        </Box>
+      </Toolbar>
+    </AppBar>
   );
 }
 
-export default App;
 
 
 
-
-
-
-// server.js
-
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
-
-const employeeRoutes = require('./routes/employeeRoutes');
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// ✅ Correct route
-app.use('/api', employeeRoutes);
-
-const PORT = process.env.PORT || 5001;
-
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://10.199.22.57:${PORT}`);
-});
-
-
-
-
-
-.env
-
-
-
-DB_SERVER=SRVWUPNQ0986V
-DB_USER=GSOC_Test
-DB_PASSWORD=Westernccure@2025
-DB_DATABASE=ACVSCore
-PORT=5001

@@ -1,3 +1,19 @@
+<Nav.Link href="http://10.199.22.57:3000/partition/Pune/history"  className="nav-item-infographic"><i class="bi bi-clock-history"></i></Nav.Link>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 import React, { useEffect, useState } from 'react';

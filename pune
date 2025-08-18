@@ -1,5 +1,6 @@
-<Nav.Link href="http://10.199.22.57:3000/partition/Pune/history"  className="nav-item-infographic"><i class="bi bi-clock-history"></i></Nav.Link>
-
+ <Nav.Link href="http://10.199.22.57:3002/partition/US.CO.OBS/history" className="nav-item-infographic">
+              History
+            </Nav.Link>
 
 
 

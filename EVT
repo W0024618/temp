@@ -1,3 +1,345 @@
+// controllers/employeeController.js
+const { getPool } = require('../config/db');
+
+const getEmployees = async (req, res) => {
+  console.log('🎯 [GET] /api/employees called');
+  try {
+    const pool = await getPool();
+    console.log('✅ DB pool acquired');
+
+    const result = await pool.request().query(`
+      SELECT DISTINCT
+        AP.ObjectID           AS EmployeeObjID,
+        AP.Name               AS EmpName,
+        CASE AP.Int1 WHEN 0 THEN AP.Text12 ELSE CAST(AP.Int1 AS NVARCHAR(50)) END AS EmployeeID,
+        PT.Name               AS PersonnelType,
+        AP.Text10             AS Manager_Name,
+        AP.Int4               AS Manager_WU_ID,
+        AP.Disabled           AS Profile_Disabled,
+        COUNT(ACR.Name)       AS Total_Cards,
+        /* aggregated card numbers as comma separated string */
+        (
+          SELECT STUFF(
+            (
+              SELECT ',' + ISNULL(AC2.CardNumber,'')
+              FROM ACVSCore.Access.Credential AC2
+              WHERE AC2.Name = AP.Name
+              FOR XML PATH(''), TYPE
+            ).value('.', 'nvarchar(max)'), 1, 1, ''
+          )
+        ) AS CardNumbers,
+        SUM(
+          CASE
+            WHEN (ACR.ExpirationDateTime IS NULL OR ACR.ExpirationDateTime >= GETDATE())
+              AND (ACR.Disabled IS NULL OR ACR.Disabled = 0)
+              AND (ACR.Lost IS NULL OR ACR.Lost = 0)
+              AND (ACR.Stolen IS NULL OR ACR.Stolen = 0)
+            THEN 1 ELSE 0
+          END
+        )                      AS Active_Cards,
+        SUM(
+          CASE WHEN ACR.ExpirationDateTime IS NOT NULL AND ACR.ExpirationDateTime < GETDATE() THEN 1 ELSE 0 END
+        )                      AS Expired_Cards,
+        CASE
+          WHEN AP.Disabled = 1 THEN 'Deactive'
+          WHEN AP.Disabled = 0 THEN
+            CASE
+              WHEN SUM(
+                CASE
+                  WHEN (ACR.ExpirationDateTime IS NULL OR ACR.ExpirationDateTime >= GETDATE())
+                    AND (ACR.Disabled IS NULL OR ACR.Disabled = 0)
+                    AND (ACR.Lost IS NULL OR ACR.Lost = 0)
+                    AND (ACR.Stolen IS NULL OR ACR.Stolen = 0)
+                  THEN 1 ELSE 0
+                END
+              ) > 0 THEN 'Active'
+              ELSE 'Deactive'
+            END
+          ELSE 'Deactive'
+        END                    AS Employee_Status
+      FROM ACVSCore.Access.Personnel AP
+      LEFT JOIN ACVSCore.Access.Credential    ACR ON AP.Name = ACR.Name
+      LEFT JOIN ACVSCore.Access.PersonnelType PT  ON PT.ObjectID = AP.PersonnelTypeID
+      LEFT JOIN ACVSCore.Access.Images        AI  ON AI.ParentId = AP.ObjectID
+      GROUP BY
+        AP.ObjectID,
+        AP.Name,
+        AP.Int1,
+        AP.Text12,
+        PT.Name,
+        AP.Text10,
+        AP.Int4,
+        AP.Disabled
+      ORDER BY AP.Name
+    `);
+
+    console.log('✅ Query executed, rows:', result.recordset.length);
+
+    const employees = result.recordset.map(emp => {
+      // convert comma string to array (empty array if null/empty)
+      const cardNumbersArr = emp.CardNumbers && emp.CardNumbers.length
+        ? emp.CardNumbers.split(',').map(s => s.trim()).filter(s => s.length)
+        : [];
+
+      return {
+        id:               emp.EmployeeObjID,
+        EmpName:          emp.EmpName,
+        EmployeeID:       emp.EmployeeID,
+        PersonnelType:    emp.PersonnelType,
+        Manager_Name:     emp.Manager_Name,
+        Manager_WU_ID:    emp.Manager_WU_ID,
+        Profile_Disabled: Boolean(emp.Profile_Disabled),
+        Total_Cards:      emp.Total_Cards,
+        Cards_Number:     cardNumbersArr,   // kept for backward compat
+        CardNumbers:      cardNumbersArr,   // new clearer name (array)
+        Active_Cards:     emp.Active_Cards,
+        Employee_Status:  emp.Employee_Status,
+        imageUrl:         `/api/employees/${emp.EmployeeObjID}/image`
+      };
+    });
+
+    return res.json(employees);
+  } catch (err) {
+    console.error('❌ Error in getEmployees:', err.stack || err);
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: err.message
+    });
+  }
+};
+
+/**
+ * GET /api/stats
+ * - without query params: returns single-row totals (same as before)
+ * - with ?details=<key>&page=&limit=&pType=&q= : returns paginated details
+ *
+ * Details listing returns each record with CardNumbers array (and Cards_Number alias)
+ */
+const getEmployeeStats = async (req, res) => {
+  try {
+    const pool = await getPool();
+
+    // If no details param -> return the single-row summary (existing behaviour)
+    const details = (req.query.details || '').trim();
+    if (!details) {
+      const summaryResult = await pool.request().query(`
+        SELECT
+          COUNT(*) AS TotalProfiles,
+          SUM(CASE WHEN AP.Disabled = 0 THEN 1 ELSE 0 END) AS ActiveProfiles,
+          SUM(CASE WHEN AP.Disabled = 0 AND PT.Name = 'Employee' THEN 1 ELSE 0 END) AS ActiveEmployees,
+          SUM(CASE WHEN AP.Disabled = 0 AND PT.Name = 'Contractor' THEN 1 ELSE 0 END) AS ActiveContractors,
+          SUM(CASE WHEN AP.Disabled = 1 THEN 1 ELSE 0 END) AS TerminatedProfiles,
+          SUM(CASE WHEN AP.Disabled = 1 AND PT.Name = 'Employee' THEN 1 ELSE 0 END) AS TerminatedEmployees,
+          SUM(CASE WHEN AP.Disabled = 1 AND PT.Name = 'Contractor' THEN 1 ELSE 0 END) AS TerminatedContractors
+        FROM ACVSCore.Access.Personnel AP
+        INNER JOIN ACVSCore.Access.PersonnelType PT ON PT.ObjectID = AP.PersonnelTypeID
+      `);
+      return res.json(summaryResult.recordset[0]);
+    }
+
+    // --- details listing mode ---
+    const token = details.toLowerCase();
+
+    // pagination
+    let page = parseInt(req.query.page, 10) || 1;
+    let limit = parseInt(req.query.limit, 10) || 50;
+    if (page < 1) page = 1;
+    if (limit < 1) limit = 1;
+    if (limit > 500) limit = 500; // safety cap
+    const offset = (page - 1) * limit;
+
+    // optional personnel type filter (whitelist)
+    const pTypeRaw = (req.query.pType || '').trim();
+    const pType = (pTypeRaw.toLowerCase() === 'employee') ? 'Employee'
+                : (pTypeRaw.toLowerCase() === 'contractor') ? 'Contractor'
+                : null;
+
+    // optional search q
+    const qRaw = (req.query.q || '').trim();
+    const q = qRaw.replace(/[%_]/g, ''); // basic sanitization
+
+    // map details token to WHERE clauses
+    const whereClauses = [];
+    switch (token) {
+      case 'totalprofiles':
+      case 'total':
+        break;
+      case 'activeprofiles':
+      case 'active':
+        whereClauses.push('EA.Profile_Disabled = 0');
+        break;
+      case 'terminatedprofiles':
+      case 'terminated':
+        whereClauses.push('EA.Profile_Disabled = 1');
+        break;
+      case 'activeemployees':
+        whereClauses.push("EA.Profile_Disabled = 0 AND EA.PersonnelType = 'Employee'");
+        break;
+      case 'activecontractors':
+        whereClauses.push("EA.Profile_Disabled = 0 AND EA.PersonnelType = 'Contractor'");
+        break;
+      case 'terminatedemployees':
+        whereClauses.push("EA.Profile_Disabled = 1 AND EA.PersonnelType = 'Employee'");
+        break;
+      case 'terminatedcontractors':
+        whereClauses.push("EA.Profile_Disabled = 1 AND EA.PersonnelType = 'Contractor'");
+        break;
+      default:
+        return res.status(400).json({ error: 'Unsupported details value', supported: [
+          'TotalProfiles','ActiveProfiles','TerminatedProfiles',
+          'ActiveEmployees','ActiveContractors','TerminatedEmployees','TerminatedContractors'
+        ]});
+    }
+
+    if (pType) whereClauses.push(`EA.PersonnelType = '${pType}'`);
+    if (q) {
+      const safeQ = q.replace(/'/g, "''");
+      whereClauses.push(`(EA.EmpName LIKE '%${safeQ}%' OR EA.EmployeeID LIKE '%${safeQ}%')`);
+    }
+    const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    // Build CTE that aggregates cards per person and also aggregates card numbers (comma string)
+    const cte = `
+      WITH EmpAgg AS (
+        SELECT
+          AP.ObjectID           AS EmployeeObjID,
+          AP.Name               AS EmpName,
+          CASE AP.Int1 WHEN 0 THEN AP.Text12 ELSE CAST(AP.Int1 AS NVARCHAR(50)) END AS EmployeeID,
+          ISNULL(PT.Name, '')   AS PersonnelType,
+          AP.Text10             AS Manager_Name,
+          AP.Int4               AS Manager_WU_ID,
+          AP.Disabled           AS Profile_Disabled,
+          COUNT(ACR.Name)       AS Total_Cards,
+          SUM(
+            CASE
+              WHEN (ACR.ExpirationDateTime IS NULL OR ACR.ExpirationDateTime >= GETDATE())
+                AND (ACR.Disabled IS NULL OR ACR.Disabled = 0)
+                AND (ACR.Lost IS NULL OR ACR.Lost = 0)
+                AND (ACR.Stolen IS NULL OR ACR.Stolen = 0)
+              THEN 1 ELSE 0
+            END
+          ) AS Active_Cards,
+          (
+            SELECT STUFF(
+              (
+                SELECT ',' + ISNULL(AC2.CardNumber,'')
+                FROM ACVSCore.Access.Credential AC2
+                WHERE AC2.Name = AP.Name
+                FOR XML PATH(''), TYPE
+              ).value('.', 'nvarchar(max)'), 1, 1, ''
+            )
+          ) AS CardNumbers
+        FROM ACVSCore.Access.Personnel AP
+        LEFT JOIN ACVSCore.Access.Credential ACR ON AP.Name = ACR.Name
+        LEFT JOIN ACVSCore.Access.PersonnelType PT ON PT.ObjectID = AP.PersonnelTypeID
+        GROUP BY
+          AP.ObjectID, AP.Name, AP.Int1, AP.Text12, PT.Name, AP.Text10, AP.Int4, AP.Disabled
+      ),
+      EmpAggWithStatus AS (
+        SELECT
+          EmployeeObjID,
+          EmpName,
+          EmployeeID,
+          PersonnelType,
+          Manager_Name,
+          Manager_WU_ID,
+          Profile_Disabled,
+          Total_Cards,
+          Active_Cards,
+          CardNumbers,
+          CASE WHEN Profile_Disabled = 1 THEN 'Deactive'
+               WHEN Profile_Disabled = 0 AND Active_Cards > 0 THEN 'Active'
+               ELSE 'Deactive' END AS Employee_Status
+        FROM EmpAgg
+      )
+    `;
+
+    // count query
+    const countSql = `${cte} SELECT COUNT(*) AS totalCount FROM EmpAggWithStatus EA ${whereSql};`;
+
+    // data query with pagination (includes CardNumbers string)
+    const dataSql = `
+      ${cte}
+      SELECT
+        EA.EmployeeObjID AS id,
+        EA.EmpName,
+        EA.EmployeeID,
+        EA.PersonnelType,
+        EA.Manager_Name,
+        EA.Manager_WU_ID,
+        EA.Profile_Disabled,
+        EA.Total_Cards,
+        EA.Active_Cards,
+        EA.Employee_Status,
+        EA.CardNumbers
+      FROM EmpAggWithStatus EA
+      ${whereSql}
+      ORDER BY EA.EmpName
+      OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY;
+    `;
+
+    // execute queries
+    const countResult = await pool.request().query(countSql);
+    const totalCount = (countResult.recordset[0] && countResult.recordset[0].totalCount) ? countResult.recordset[0].totalCount : 0;
+
+    const dataResult = await pool.request().query(dataSql);
+    const rows = dataResult.recordset || [];
+
+    const employees = rows.map(emp => {
+      const cardNumbersArr = emp.CardNumbers && emp.CardNumbers.length
+        ? emp.CardNumbers.split(',').map(s => s.trim()).filter(s => s.length)
+        : [];
+
+      return {
+        id:               emp.id,
+        EmpName:          emp.EmpName,
+        EmployeeID:       emp.EmployeeID,
+        PersonnelType:    emp.PersonnelType,
+        Manager_Name:     emp.Manager_Name,
+        Manager_WU_ID:    emp.Manager_WU_ID,
+        Profile_Disabled: Boolean(emp.Profile_Disabled),
+        Total_Cards:      emp.Total_Cards,
+        Active_Cards:     emp.Active_Cards,
+        Employee_Status:  emp.Employee_Status,
+        // card numbers (array)
+        Cards_Number:     cardNumbersArr,   // backward compat name
+        CardNumbers:      cardNumbersArr,   // clearer name
+        imageUrl:         `/api/employees/${emp.id}/image`
+      };
+    });
+
+    return res.json({
+      total: totalCount,
+      page,
+      limit,
+      data: employees
+    });
+
+  } catch (err) {
+    console.error('❌ getEmployeeStats error', err.stack || err);
+    return res.status(500).json({ error: 'Failed to get stats', message: err.message });
+  }
+};
+
+module.exports = {
+  getEmployees,
+  getEmployeeStats
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Now Good API Works as per requirnment.
 Add Card Numbers in API Responce for all API
 

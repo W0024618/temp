@@ -1,430 +1,624 @@
+In APAC Dashboard Quezon City 6th floor and 7th Floor and In Pune Tower b 
+Display mismatch count need to fix .
+Debug each Code line by line and fix the issue carefully..
 
 
-// src/pages/History.jsx — APAC Edition
-
-import React, { useEffect, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
-import {
-  Container,
-  Box,
-  Button,
-  Typography,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Paper,
-  TextField
-} from '@mui/material';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { format } from 'date-fns';
-import * as XLSX from 'xlsx';
-// import { saveAs } from 'file-saver';
-
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
-
-import Header from '../components/Header';
-import Footer from '../components/Footer';
-import LoadingSpinner from '../components/LoadingSpinner';
-import { fetchHistory } from '../api/occupancy.service';
-
-// APAC display mapping
-const apacPartitionDisplay = {
-  'IN.Pune': { country: 'India', city: 'Pune' },
-  'MY.Kuala Lumpur': { country: 'Malaysia', city: 'Kuala Lumpur' },
-  'PH.Quezon': { country: 'Philippines', city: 'Quezon City' },
-  'PH.Taguig': { country: 'Philippines', city: 'Taguig' },
-  'JP.Tokyo': { country: 'Japan', city: 'Tokyo' },
-};
-
-// FE ↔ BE keys
-const apacForwardKey = {
-  'IN.Pune': 'Pune',
-  'MY.Kuala Lumpur': 'MY.Kuala Lumpur',
-  'PH.Quezon': 'Quezon City',
-  'PH.Taguig': 'Taguig City',
-  'JP.Tokyo': 'JP.Tokyo',
-};
-const apacReverseKey = Object.fromEntries(
-  Object.entries(apacForwardKey).map(([fe, be]) => [be, fe])
-);
-
-// helper to display “Quezon City” → “Quezon City”
-const formatPartition = key => {
-  const fe = apacReverseKey[key];
-  return fe
-    ? apacPartitionDisplay[fe].city
-    : key;
-};
-
-export default function History() {
-  const { partition } = useParams();
-  const decodedPartition = partition ? decodeURIComponent(partition) : null;
-  const backendFilterKey = decodedPartition
-    ? apacForwardKey[decodedPartition] || decodedPartition
-    : null;
-
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [pickedDate, setPickedDate] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchHistory(decodedPartition)
-      .then(json => {
-        setData(json);
-      })
-      .finally(() => setLoading(false));
-  }, [decodedPartition]);
-
-  const summaryEntry = useMemo(() => {
-    if (!data || !pickedDate) return null;
-    const ds = format(pickedDate, 'yyyy-MM-dd');
-    return data.summaryByDate.find(r =>
-      r.date === ds || r.date.startsWith(ds)
-    ) || null;
-  }, [data, pickedDate]);
-
-  const partitionRows = useMemo(() => {
-    if (!summaryEntry) return [];
-    if (backendFilterKey && summaryEntry.region) {
-      const fe = Object.keys(apacPartitionDisplay).find(
-        code => apacForwardKey[code] === backendFilterKey || code === backendFilterKey
-      );
-      const disp = fe ? apacPartitionDisplay[fe] : {};
-      return [{
-        country: disp.country || 'Unknown',
-        city: disp.city || backendFilterKey.replace(' City', ''),
-        employee: summaryEntry.region.Employee || 0,
-        contractor: summaryEntry.region.Contractor || 0,
-        total: summaryEntry.region.total || 0
-      }];
-    }
-    return Object.entries(summaryEntry.partitions).map(([key, v]) => {
-      const fe = Object.entries(apacForwardKey).find(([, be]) =>
-        be === key || `${be} City` === key
-      )?.[0];
-      const disp = fe
-        ? apacPartitionDisplay[fe]
-        : Object.values(apacPartitionDisplay)
-          .find(d => d.city === key.replace(' City', ''));
-      return {
-        country: disp?.country || 'Unknown',
-        city: disp?.city || key.replace(' City', ''),
-        employee: v.Employee || v.EmployeeCount || 0,
-        contractor: v.Contractor || v.ContractorCount || 0,
-        total: v.total || 0
-      };
-    });
-  }, [summaryEntry, backendFilterKey]);
-
- 
-
-  const formatApiTime12 = iso => {
-    if (!iso) return "";
-    // get HH:MM:SS part from ISO like "2025-08-28T10:22:33.000Z"
-    const tp = (iso && iso.slice(11, 19)) || "";
-    if (!tp) return "";
-    const [hStr, mStr, sStr] = tp.split(':');   // ✅ now include seconds
-    const hh = parseInt(hStr, 10);
-    if (Number.isNaN(hh)) return tp;
-    let h12 = hh % 12;
-    if (h12 === 0) h12 = 12;
-    const ampm = hh >= 12 ? "PM" : "AM";
-    return `${String(h12).padStart(2, "0")}:${mStr}:${sStr} ${ampm}`;
-  };
-
-
-  // ←——— FIXED detailRows: only filter by date & partition, no dedupe, no Direction check
-  const detailRows = useMemo(() => {
-    if (!data || !pickedDate || !showDetails) return [];
-    const ds = format(pickedDate, 'yyyy-MM-dd');
-
-    return data.details
-      .filter(r =>
-        // match the date portion of the ISO timestamp
-        r.LocaleMessageTime.slice(0, 10) === ds
-        // if a partition filter is active, match that too
-        // && (!backendFilterKey || r.PartitionNameFriendly === backendFilterKey)
-
-        && (
-          !backendFilterKey ||
-          r.PartitionNameFriendly === backendFilterKey ||
-          apacForwardKey[r.PartitionNameFriendly] === backendFilterKey
-        )
-
-      )
-      .sort((a, b) =>
-        a.LocaleMessageTime.localeCompare(b.LocaleMessageTime)
-      );
-  }, [data, pickedDate, showDetails, backendFilterKey]);
+http://10.199.22.57:3008/api/occupancy/live-summary
+in API 
+  "success": true,
+  "today": {
+    "total": 838,
+    "Employee": 713,
+    "Contractor": 125
+  },
+  "realtime": {
+    "Quezon City": {
+      "total": 78,
+      "Employee": 68,
+      "Contractor": 10,
+      "floors": {
+        "7th Floor": 53,
+        "6th Floor": 25
+      },
+      "zones": {
+        "7th Floor": 53,
+        "6th Floor": 25
+      }
+    },
+    "Pune": {
+      "total": 132,
+      "Employee": 102,
+      "Contractor": 30,
+      "floors": {
+        "Podium Floor": 102,
+        "2nd Floor": 10,
+        "Tower B": 20
+      },
+      "zones": {
+        "Reception Area": 14,
+        "2nd Floor, Pune": 10,
+        "Red Zone": 20,
+        "Tower B GYM": 4,
+        "Tower B": 16,
+        "Orange Zone": 20,
+        "Yellow Zone": 22,
+        "Green Zone": 20,
+        "Yellow Zone - Outer Area": 5,
+        "Red Zone - Outer Area": 1
+      }
+    },
 
 
 
+lets check same Time In Live-summary API display "Tower B": 20 Count in Dashboard and  in same tine http://10.199.22.57:3000/partition/Pune/details  in details Section Tower B (Total 24) display 24 count
+this need to fix issue carefully
 
-  // const handleExport = () => {
-  //   const ws = XLSX.utils.json_to_sheet(
-  //     detailRows.map((r, i) => ({
-  //       Sr: i + 1,
-  //       // use the raw API date part (no timezone conversion)
-  //       Date: r.LocaleMessageTime ? r.LocaleMessageTime.slice(0, 10) : '',
-  //       // use the same helper as the UI so Excel matches frontend (12-hour, no TZ conversion)
-  //       Time: formatApiTime12(r.LocaleMessageTime),
-  //       EmployeeID: r.EmployeeID,
-  //       CardNumber: r.CardNumber,
-  //       Name: r.ObjectName1,
-  //       PersonnelType: r.PersonnelType,
-  //       CompanyName: r.CompanyName,
-  //       PrimaryLocation: r.PrimaryLocation,
-  //       Door: r.Door,
-  //       Partition: formatPartition(r.PartitionNameFriendly)
-  //     }))
-  //   );
-  //   const wb = XLSX.utils.book_new();
-  //   XLSX.utils.book_append_sheet(wb, ws, 'Details');
-  //   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  //   saveAs(new Blob([buf]), `apac_history_${format(pickedDate, 'yyyyMMdd')}.xlsx`);
-  // };
+http://10.199.22.57:3000/partition/Pune/details
+
+Tower B (Total 24)
+
+
+
+Same issue for QUEZON city 6th floor and 7th floor got Wrong count checck each below file related to APAC dashboard and Fix the issue carefully..
+http://10.199.22.57:3000/partition/Quezon%20City/details
+
+7th Floor (Total 55)
+
+6th Floor (Total 30)
 
 
 
 
 
-const handleExport = async () => {
-  if (!pickedDate || !detailRows.length) return;
 
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Details");
+D:\DASHBOARD\apac-occupancy-backend\src\services\occupancy.service.js
 
-  // --- Top date row (merged across all columns) ---
-  // sheet.mergeCells(1, 1, 1, 11); 
-  sheet.mergeCells('A1:E1');
 
-  const titleCell = sheet.getCell("A1");
-  titleCell.value = format(pickedDate, "EEEE, d MMMM, yyyy");
-  titleCell.alignment = { horizontal: "center", vertical: "middle" };
-  titleCell.font = { bold: true, size: 14 };
+//C:\Users\W0024618\Desktop\apac-occupancy-backend\src\services\occupancy.service.js
 
-  // --- Header row (immediately after date, no spacer) ---
-  const headers = [
-    "Sr",
-    "Date",
-    "Time",
-    "Employee ID",
-    "Card Number",
-    "Name",
-    "Personnel Type",
-    "Company",
-    "Primary Location",
-    "Door",
-    "Partition"
-  ];
-  const headerRow = sheet.addRow(headers);
-  headerRow.eachCell(cell => {
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFFFC107" }
-    };
-    cell.alignment = { horizontal: "center" };
-    cell.border = {
-      top: { style: "thin" },
-      left: { style: "thin" },
-      bottom: { style: "thin" },
-      right: { style: "thin" }
-    };
-  });
+const { poolPromise, sql } = require('../config/db');
 
-  // --- Data rows ---
-  detailRows.forEach((r, i) => {
-    const row = sheet.addRow([
-      i + 1,
-      r.LocaleMessageTime ? r.LocaleMessageTime.slice(0, 10) : "",
-      formatApiTime12(r.LocaleMessageTime),
-      r.EmployeeID,
-      r.CardNumber,
-      r.ObjectName1,
-      r.PersonnelType,
-      r.CompanyName,
-      r.PrimaryLocation,
-      r.Door,
-      formatPartition(r.PartitionNameFriendly)
-    ]);
-    row.eachCell(cell => {
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" }
-      };
-    });
-  });
+const partitionList = [
+  'APAC.Default',
+  'CN.Beijing',
+  'JP.Tokyo',
+  'PH.Manila',
+  'MY.Kuala Lumpur',
+  'IN.Pune'
+];
 
-  // --- Auto column width ---
-  sheet.columns.forEach(col => {
-    let maxLen = 7;
-    col.eachCell({ includeEmpty: true }, c => {
-      maxLen = Math.max(maxLen, (c.value ? c.value.toString().length : 0) + 2);
-    });
-    col.width = maxLen;
-  });
+function quoteList(arr) {
+  return arr.map(p => `'${p.replace("'", "''")}'`).join(',');
+}
 
-  // --- Save file ---
-  const buf = await workbook.xlsx.writeBuffer();
-  saveAs(new Blob([buf]), `apac_history_${format(pickedDate, "yyyyMMdd")}.xlsx`);
+/**
+ * Live occupancy (today) for APAC
+ */
+exports.fetchLiveOccupancy = async () => {
+  const pool = await poolPromise;
+  const parts = quoteList(partitionList);
+
+  const query = `
+    WITH CombinedEmployeeData AS (
+      SELECT
+        t1.ObjectName1,
+        t1.ObjectName2             AS Door,               -- include Door
+        CASE WHEN t2.Int1 = 0 THEN t2.Text12 ELSE CAST(t2.Int1 AS NVARCHAR) END AS EmployeeID,
+        t3.Name                    AS PersonnelType,
+        t1.ObjectIdentity1         AS PersonGUID,
+      t2.Text4                   AS CompanyName,   -- ✅ company
+        t2.Text5                   AS PrimaryLocation, -- ✅ location         
+
+        -- extract CardNumber from XML or shred table
+        COALESCE(
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+          sc.value
+        )                          AS CardNumber,
+        CASE
+          WHEN t1.ObjectName2 LIKE 'APAC_PI%' THEN 'Taguig City'
+          WHEN t1.ObjectName2 LIKE 'APAC_PH%' THEN 'Quezon City'
+          WHEN t1.ObjectName2 LIKE '%PUN%'   THEN 'Pune'
+          WHEN t1.ObjectName2 LIKE 'APAC_JPN%' THEN 'JP.Tokyo'
+          WHEN t1.ObjectName2 LIKE 'APAC_MY%'  THEN 'MY.Kuala Lumpur'
+          ELSE t1.PartitionName2
+        END                        AS PartitionName2,
+        DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
+        t5d.value                  AS Direction
+      FROM ACVSUJournal_00010029.dbo.ACVSUJournalLog t1
+      JOIN ACVSCore.Access.Personnel       t2 ON t1.ObjectIdentity1 = t2.GUID
+      JOIN ACVSCore.Access.PersonnelType   t3 ON t2.PersonnelTypeID = t3.ObjectID
+      LEFT JOIN ACVSUJournal_00010029.dbo.ACVSUJournalLogxmlShred t5d
+        ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+      LEFT JOIN ACVSUJournal_00010029.dbo.ACVSUJournalLogxml t_xml
+        ON t1.XmlGUID = t_xml.GUID
+      LEFT JOIN (
+        SELECT GUID, value
+        FROM ACVSUJournal_00010029.dbo.ACVSUJournalLogxmlShred
+        WHERE Name IN ('Card','CHUID')
+      ) AS sc
+        ON t1.XmlGUID = sc.GUID
+      WHERE
+        t1.MessageType = 'CardAdmitted'
+        AND t1.PartitionName2 IN (${parts})
+        AND CONVERT(DATE, DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC))
+            = CONVERT(DATE, GETDATE())
+    ), Ranked AS (
+      SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY PersonGUID ORDER BY LocaleMessageTime DESC) AS rn
+      FROM CombinedEmployeeData
+    )
+    SELECT
+      ObjectName1,
+      Door,                            -- door
+      PersonnelType,
+      EmployeeID,
+      CardNumber,                      -- now returned
+      PartitionName2,
+      LocaleMessageTime,
+      Direction,
+      PersonGUID,
+     CompanyName,  
+      PrimaryLocation
+    FROM Ranked
+    WHERE rn = 1;
+  `;
+
+  const result = await pool.request().query(query);
+  return result.recordset;
 };
 
 
 
 
+/**
+ * Historical raw‐data fetch for the past N days, all or by location.
+ */
 
 
-//   // NEW: export summary (partitionRows) to Excel -- fixed format
-// const handleExportSummary = () => {
-//   if (!pickedDate) return;
+exports.fetchHistoricalData = async ({ days = 7, location = null }) => {
+  const pool = await poolPromise;
+  const parts = quoteList(partitionList);
 
-//   // Build rows manually in the exact order you want
-//   const rows = [
-//     // Row 1: Date only (first cell filled, rest blank)
-//     [format(pickedDate, 'EEEE, d MMMM, yyyy')],
-//     // Row 2: Blank
-//     [],
-//     // Row 3: Column headers
-//     ['Country', 'City', 'Employees', 'Contractors', 'Total'],
-//     // Data rows
-//     ...partitionRows.map(r => [
-//       r.country,
-//       r.city,
-//       r.employee,
-//       r.contractor,
-//       r.total,
-//     ]),
-//     // Total row
-//     [
-//       'Total',
-//       '',
-//       partitionRows.reduce((s, r) => s + r.employee, 0),
-//       partitionRows.reduce((s, r) => s + r.contractor, 0),
-//       partitionRows.reduce((s, r) => s + r.total, 0),
-//     ],
-//   ];
+  // Outer‐query filter based on the alias
+  const outerFilter = location
+    ? `WHERE PartitionNameFriendly = @location`
+    : `WHERE PartitionNameFriendly IN (${quoteList([
+        'Pune','Quezon City','JP.Tokyo','MY.Kuala Lumpur','Taguig City'
+      ])})`;
 
-//   // Convert array-of-arrays to worksheet
-//   const ws = XLSX.utils.aoa_to_sheet(rows);
+  const query = `
+    WITH Hist AS (
+      SELECT
+        DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
+        t1.ObjectName1,
+        t1.ObjectName2               AS Door,
+        CASE WHEN t2.Int1 = 0 THEN t2.Text12 ELSE CAST(t2.Int1 AS NVARCHAR) END AS EmployeeID,
+        t3.Name                      AS PersonnelType,
+        t1.ObjectIdentity1           AS PersonGUID,
 
-//   // Optional: make the top date row span all 5 columns
-//   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
 
-//   // Create workbook and export
-//   const wb = XLSX.utils.book_new();
-//   XLSX.utils.book_append_sheet(wb, ws, 'Summary');
-//   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-//   saveAs(new Blob([buf]), `apac_summary_${format(pickedDate, 'yyyyMMdd')}.xlsx`);
+ -- **Single** friendly‐name alias, with fallback
+        COALESCE(
+          CASE
+            WHEN t1.ObjectName2 LIKE 'APAC_PI%'   THEN 'Taguig City'
+            WHEN t1.ObjectName2 LIKE 'APAC_PH%'   THEN 'Quezon City'
+            WHEN t1.ObjectName2 LIKE '%PUN%'      THEN 'Pune'
+            WHEN t1.ObjectName2 LIKE 'APAC_JPN%'  THEN 'JP.Tokyo'
+            WHEN t1.ObjectName2 LIKE 'APAC_MY%'   THEN 'MY.Kuala Lumpur'
+            ELSE t1.PartitionName2
+          END,
+          'APAC.Default'
+        )                             AS PartitionNameFriendly,
+
+        -- extract CardNumber
+        COALESCE(
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+          sc.value
+        )                            AS CardNumber,
+        t5d.value                    AS Direction
+      FROM ACVSUJournal_00010029.dbo.ACVSUJournalLog t1
+      JOIN ACVSCore.Access.Personnel       t2 ON t1.ObjectIdentity1 = t2.GUID
+      JOIN ACVSCore.Access.PersonnelType   t3 ON t2.PersonnelTypeID = t3.ObjectID
+      LEFT JOIN ACVSUJournal_00010029.dbo.ACVSUJournalLogxmlShred t5d
+        ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+      LEFT JOIN ACVSUJournal_00010029.dbo.ACVSUJournalLogxml t_xml
+        ON t1.XmlGUID = t_xml.GUID
+      LEFT JOIN (
+        SELECT GUID, value
+        FROM ACVSUJournal_00010029.dbo.ACVSUJournalLogxmlShred
+        WHERE Name IN ('Card','CHUID')
+      ) AS sc
+        ON t1.XmlGUID = sc.GUID
+      WHERE
+        t1.MessageType = 'CardAdmitted'
+        -- date filter remains here
+        AND CONVERT(DATE, DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC))
+            >= DATEADD(DAY, -${days}, CONVERT(DATE, GETDATE()))
+    )
+
+    -- now filter by the newly‐defined alias
+    SELECT *
+    FROM Hist
+    ${outerFilter}
+    ORDER BY LocaleMessageTime ASC;
+  `;
+
+  const req = pool.request();
+  if (location) {
+    req.input('location', sql.NVarChar, location);
+  }
+  const result = await req.query(query);
+  return result.recordset;
+};
+
+
+exports.fetchHistoricalOccupancy = async (location) =>
+  exports.fetchHistoricalData({ days: 7, location: location || null });
+
+
+
+
+
+
+
+
+
+
+
+
+//C:\Users\W0024618\Desktop\apac-occupancy-backend\src\controllers\occupancy.controller.js
+
+const service = require('../services/occupancy.service');
+
+const {
+  doorMap,
+  normalizedDoorZoneMap,
+  doorZoneMap,
+  zoneFloorMap,
+  normalizeDoorName
+} = require('../utils/doorMap');
+
+
+function isEmployeeType(pt) {
+  return ['Employee','Terminated Employee','Terminated Personnel'].includes(pt);
+}
+
+function lookupFloor(partition, rawDoor, direction, unmapped) {
+  const norm = normalizeDoorName(rawDoor);
+  const key  = `${norm}___${direction}`;
+
+  // 1) Try normalized lookup
+  const zone = normalizedDoorZoneMap[key];
+  if (zone) {
+    const f = zoneFloorMap[zone];
+    // if zone has a known floor -> return it
+    if (f) return f;
+    // zone exists but has no floor (e.g. "Out of office") -> treat as known but Unknown floor
+    // return immediately to avoid falling back to per-partition doorMap and marking as unmapped
+    return 'Unknown';
+  }
+
+
+  
+
+  // 2) Fallback to per-partition doorMap
+  const entry = doorMap.find(d =>
+    d.normalizedDoor === norm && d.partition === partition
+  );
+  if (entry) {
+    const fl = direction === 'InDirection'
+      ? entry.inDirectionFloor
+      : entry.outDirectionFloor;
+    if (fl) return fl;
+  }
+
+  // 3) Nothing matched → record & return Unknown
+  unmapped.add(`${partition}|${rawDoor}`);
+  return 'Unknown';
+}
+
+
+
+function mapDoorToZone(rawDoor, rawDir) {
+  const key = normalizeDoorName(rawDoor) + '___' + (rawDir === 'InDirection' ? 'InDirection' : 'OutDirection');
+  const zone = normalizedDoorZoneMap[key];
+  if (!zone) return 'Unknown Zone';
+  // for OutDirection that aren’t true “Out of office”, strip trailing “ Zone”
+  if (rawDir === 'OutDirection' && zone !== 'Out of office') {
+    return zone.replace(/\s+Zone$/i, '');
+  }
+  return zone;
+}
+
+
+
+exports.getLiveOccupancy = async (req,res) => {
+  try {
+    const data = await service.fetchLiveOccupancy();
+    res.json({ success:true, count:data.length, data });
+  } catch(e) {
+    console.error(e);
+    res.status(500).json({ success:false, message:'Live fetch failed' });
+  }
+};
+
+
+
+
+// exports.getLiveSummary = async (req,res) => {
+//   try {
+//     const swipes = await service.fetchLiveOccupancy();
+
+//     // first swipe per person = TODAY
+//     const first = {};
+//     swipes.forEach(r => {
+//       const t = new Date(r.LocaleMessageTime).getTime();
+//       if (!first[r.PersonGUID] || t < new Date(first[r.PersonGUID].LocaleMessageTime).getTime()) {
+//         first[r.PersonGUID] = r;
+//       }
+//     });
+//     const today = { total:0, Employee:0, Contractor:0 };
+//     Object.values(first).forEach(r => {
+//       today.total++;
+//       if (isEmployeeType(r.PersonnelType)) today.Employee++;
+//       else today.Contractor++;
+//     });
+
+//     // last swipe per person for realtime
+//     const last = {};
+//     swipes.forEach(r => {
+//       const t = new Date(r.LocaleMessageTime).getTime();
+//       if (!last[r.PersonGUID] || t > new Date(last[r.PersonGUID].LocaleMessageTime).getTime()) {
+//         last[r.PersonGUID] = r;
+//       }
+//     });
+
+//     const realtime = {};
+//     const unmapped = new Set();
+
+
+
+
+//     Object.values(last).forEach(r => {
+//       const p = r.PartitionName2;
+
+//       // ── Pune gets the more advanced In/Out eviction logic ──
+//       if (p === 'Pune') {
+//         const zoneRaw = mapDoorToZone(r.Door, r.Direction);
+
+//         // 1) Unknown keys → drop
+//         if (zoneRaw === 'Unknown Zone') return;
+
+//         // 2) True “Out of office” → full drop
+//         if (r.Direction === 'OutDirection' && zoneRaw === 'Out of office') {
+//           return;
+//         }
+
+//         // 3) Any other OutDirection → only keep if it’s “…Outer Area”
+//         if (r.Direction === 'OutDirection' && !zoneRaw.endsWith('Outer Area')) {
+//           return;
+//         }
+
+//         // 4) now safe to count
+//         if (!realtime[p]) realtime[p] = { total:0, Employee:0, Contractor:0, floors:{} };
+//         realtime[p].total++;
+//         if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+//         else                                  realtime[p].Contractor++;
+
+//         // 5) floor‐bucket as usual
+//         const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
+//        if (fl !== 'Unknown') {
+//           realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
+//         }
+//         return;
+//       }
+
+//       // ── All other partitions keep your existing logic ──
+//       // (the original “drop only Out of office” snippet)
+//       const normKey = normalizeDoorName(r.Door) + '___' + r.Direction;
+//       let zone = normalizedDoorZoneMap[normKey];
+//       if (!zone) {
+//         const entry = doorMap.find(d =>
+//           d.normalizedDoor === normalizeDoorName(r.Door) &&
+//           d.partition === p
+//         );
+//         zone = entry
+//           ? (r.Direction === 'InDirection'
+//               ? normalizedDoorZoneMap[`${entry.normalizedDoor}___InDirection`]
+//               : normalizedDoorZoneMap[`${entry.normalizedDoor}___OutDirection`])
+//           : null;
+//       }
+//      if (zone === 'Out of office') return;
+
+//       if (!realtime[p]) realtime[p] = { total:0, Employee:0, Contractor:0, floors:{} };
+//       realtime[p].total++;
+//       if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+//       else                                  realtime[p].Contractor++;
+
+//       const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
+//       if (fl !== 'Unknown') {
+//         realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
+//       }
+//     });
+
+
+//     // Log to server console for quick dev feedback:
+//     if (unmapped.size) console.warn('Unmapped doors:', Array.from(unmapped));
+
+//     res.json({
+//       success:    true,
+//       today,
+//       realtime,
+//       // expose the raw list of partition|door keys that had no mapping:
+//       unmapped:   Array.from(unmapped),
+//       details:    Object.values(last)
+//     });
+
+//   } catch (e) {
+//     console.error(e);
+//     res.status(500).json({ success:false, message:'Summary failed' });
+//   }
 // };
 
 
 
 
-// UPDATED: prettier Excel export for summary (date centered, full borders, header styling, spacing, column widths)
+exports.getLiveSummary = async (req,res) => {
+  try {
+    const swipes = await service.fetchLiveOccupancy();
 
-const handleExportSummary = async () => {
-  if (!pickedDate) return;
-
-  // workbook / sheet
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Summary');
-
-  // columns (widths)
-  ws.columns = [
-    { header: 'Country', key: 'country', width: 20 },
-    { header: 'City', key: 'city', width: 25 },
-    { header: 'Employees', key: 'employees', width: 12 },
-    { header: 'Contractors', key: 'contractors', width: 12 },
-    { header: 'Total', key: 'total', width: 12 },
-  ];
-
-  // Row 1: merged date centered
-  ws.mergeCells('A1:E1');
-  const dateCell = ws.getCell('A1');
-  dateCell.value = format(pickedDate, 'EEEE, d MMMM, yyyy');
-  dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  dateCell.font = { name: 'Calibri', size: 14, bold: true };
-
-  // Row 2: blank spacing
-  ws.addRow([]);
-
-  // Row 3: header row (we'll style it)
-  const headerRow = ws.addRow(['Country', 'City', 'Employees', 'Contractors', 'Total']);
-  headerRow.height = 20;
-
-  // style helpers
-  const thinBorder = { style: 'thin', color: { argb: 'FF000000' } };
-  const allThinBorder = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-
-  // header style: yellow fill, bold, centered
-  headerRow.eachCell(cell => {
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } }; // yellow
-    cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.border = allThinBorder;
-  });
-
-  // Row 4: blank spacing (visual)
-  ws.addRow([]);
-
-  // Data rows start at excelRowIndex = current row number + 1
-  partitionRows.forEach(r => {
-    const row = ws.addRow([r.country, r.city, r.employee, r.contractor, r.total]);
-    // style cells & numeric formatting
-    row.eachCell((cell, colNumber) => {
-      cell.border = allThinBorder;
-      if (colNumber >= 3) {
-        // numeric columns: right align, number format
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
-          cell.numFmt = '#,##0';
-        }
-      } else {
-        cell.alignment = { horizontal: 'left', vertical: 'middle' };
+    // first swipe per person = TODAY
+    const first = {};
+    swipes.forEach(r => {
+      const t = new Date(r.LocaleMessageTime).getTime();
+      if (!first[r.PersonGUID] || t < new Date(first[r.PersonGUID].LocaleMessageTime).getTime()) {
+        first[r.PersonGUID] = r;
       }
-      cell.font = { name: 'Calibri', size: 11, color: { argb: 'FF000000' } };
     });
-  });
+    const today = { total:0, Employee:0, Contractor:0 };
+    Object.values(first).forEach(r => {
+      today.total++;
+      if (isEmployeeType(r.PersonnelType)) today.Employee++;
+      else today.Contractor++;
+    });
 
-  // Final total row
-  const totalEmployees = partitionRows.reduce((s, r) => s + r.employee, 0);
-  const totalContractors = partitionRows.reduce((s, r) => s + r.contractor, 0);
-  const totalTotal = partitionRows.reduce((s, r) => s + r.total, 0);
-  const totalRow = ws.addRow(['Total', '', totalEmployees, totalContractors, totalTotal]);
+    // last swipe per person for realtime
+    const last = {};
+    swipes.forEach(r => {
+      const t = new Date(r.LocaleMessageTime).getTime();
+      if (!last[r.PersonGUID] || t > new Date(last[r.PersonGUID].LocaleMessageTime).getTime()) {
+        last[r.PersonGUID] = r;
+      }
+    });
 
-  // style total row: bold and light-gray fill
-  totalRow.eachCell((cell, colNumber) => {
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; // light gray
-    cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
-    cell.border = allThinBorder;
-    if (colNumber >= 3) {
-      cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      cell.numFmt = '#,##0';
-    } else {
-      cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
-    }
-  });
+    const realtime = {};
+    const unmapped = new Set();
 
-  // Freeze panes so header is visible (freeze above data rows: after row 4)
-  ws.views = [{ state: 'frozen', ySplit: 4 }];
+    // Build enriched details (add Zone & Floor) for every last-swipe record
+    // NOTE: we'll filter out records whose Zone resolves to "Out of office" so they
+    // neither appear in counts nor in details (strict removal per your request).
+    const enriched = Object.values(last).map(r => {
+      // determine zone (try normalized lookup + fallback)
+      const zone = mapDoorToZone(r.Door, r.Direction);
 
-  // Optional: set sheet outline or table-like styling can be added here
+      // lookupFloor returns 'Unknown' for unmapped (and adds to unmapped set)
+      const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmapped);
 
-  // export
-  const buf = await wb.xlsx.writeBuffer();
-  const safeDate = format(pickedDate, 'yyyyMMdd');
-  const filename = `apac_summary_${safeDate}.xlsx`;
-  saveAs(new Blob([buf]), filename);
+      return {
+        ...r,
+        // keep Unknown Zone as null, keep actual zone strings (including "Out of office")
+        Zone: zone === 'Unknown Zone' ? null : zone,
+        Floor: floor === 'Unknown' ? null : floor
+    
+      };
+    });
+
+    // Strictly remove "Out of office" records from details (and from counting below)
+    const details = enriched.filter(r => r.Zone !== 'Out of office');
+
+    // Counting loop (keeps Pune special logic but enforces strict drop on "Out of office")
+    Object.values(last).forEach(r => {
+      const p = r.PartitionName2;
+
+      // determine zone again for each record (use mapDoorToZone to be consistent)
+      const zoneRaw = mapDoorToZone(r.Door, r.Direction);
+
+      // STRICT RULE: if zone resolved to exact "Out of office" -> skip counting
+      if (zoneRaw === 'Out of office') return;
+
+      // Unknown keys → drop
+      if (zoneRaw === 'Unknown Zone') return;
+
+      // ensure bucket exists when we decide to count
+      const ensureBucket = (part) => {
+        if (!realtime[part]) realtime[part] = { total:0, Employee:0, Contractor:0, floors:{}, zones:{} };
+      };
+
+
+if (r.Direction === 'OutDirection') {
+  // allow certain valid OutDirection zones (Assembly Area, Reception Area, ...)
+  const allowedOutZones = new Set(['Assembly Area', 'Reception Area']);
+  if (!zoneRaw.endsWith('Outer Area') && !allowedOutZones.has(zoneRaw)) {
+    return;
+  }
+
+
+        // safe to count
+        ensureBucket(p);
+        realtime[p].total++;
+        if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+        else                                  realtime[p].Contractor++;
+
+        // floor bucket
+        const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
+        if (fl !== 'Unknown') {
+          realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
+        }
+
+        // zone bucket (clean trailing " Zone" for OutDirection cases where appropriate)
+        const z = (r.Direction === 'OutDirection' && zoneRaw !== 'Out of office')
+                    ? zoneRaw.replace(/\s+Zone$/i, '')
+                    : zoneRaw;
+        if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
+
+        return;
+      }
+
+      // ── All other partitions (existing logic) ──
+      // fallback logic to determine zone (keeps previous behaviour if normalized lookup not present)
+      const normKey = normalizeDoorName(r.Door) + '___' + r.Direction;
+      let zone = normalizedDoorZoneMap[normKey];
+      if (!zone) {
+        const entry = doorMap.find(d =>
+          d.normalizedDoor === normalizeDoorName(r.Door) &&
+          d.partition === p
+        );
+        zone = entry
+          ? (r.Direction === 'InDirection'
+              ? normalizedDoorZoneMap[`${entry.normalizedDoor}___InDirection`]
+              : normalizedDoorZoneMap[`${entry.normalizedDoor}___OutDirection`])
+          : null;
+      }
+
+      // if resolved zone (via fallback) is "Out of office" → skip (strict)
+      if (zone === 'Out of office') return;
+      if (!zone && zone !== null) {
+        // keep going — zone could be null if no mapping found, but Unknown Zone was handled above
+      }
+
+      // ok to count
+      ensureBucket(p);
+      realtime[p].total++;
+      if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+      else                                  realtime[p].Contractor++;
+
+      const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
+      if (fl !== 'Unknown') {
+        realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
+      }
+
+      const z = zone ? (r.Direction === 'OutDirection' && zone !== 'Out of office' ? zone.replace(/\s+Zone$/i, '') : zone) : null;
+      if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
+    });
+
+    // Log to server console for quick dev feedback:
+    if (unmapped.size) console.warn('Unmapped doors:', Array.from(unmapped));
+
+    res.json({
+      success:    true,
+      today,
+      realtime,
+      // expose the raw list of partition|door keys that had no mapping:
+      unmapped:   Array.from(unmapped),
+      details    // enriched details with Zone & Floor, with "Out of office" removed
+    });
+
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success:false, message:'Summary failed' });
+  }
 };
 
 
@@ -432,201 +626,451 @@ const handleExportSummary = async () => {
 
 
 
-  if (loading) return <LoadingSpinner />;
-  if (!data) return null;
+//
 
-  const datePickerSx = {
-    backgroundColor: '#000',
-    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#FFC107' },
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#FFC107' },
-    '& .MuiInputBase-input': { color: '#FFC107' },
-    '& .MuiInputLabel-root': { color: '#FFC107' },
-    '& .MuiInputAdornment-root svg': { color: '#FFC107' },
-  };
+exports.getHistoricalOccupancy = async (req, res) => {
+  const location = req.params.location || null;
+  try {
+    // 1) Pull in rows — each now has non-null PartitionNameFriendly
+    const raw = await service.fetchHistoricalOccupancy(location);
 
-  return (
-    <>
-      <Header />
-      <Container maxWidth={false} disableGutters sx={{ pt: 2, pb: 4 }}>
-        {/* ‣ Date & summary */}
-        {pickedDate && summaryEntry ? (
+    // 2) Dedupe to first swipe per person per day
+    const byDate = raw.reduce((acc, r) => {
+           // force into a "YYYY-MM-DD" string
+     const date = new Date(r.LocaleMessageTime).toISOString().slice(0, 10);
+      acc[date] = acc[date] || {};
+      if (
+        !acc[date][r.PersonGUID] ||
+        new Date(r.LocaleMessageTime) < new Date(acc[date][r.PersonGUID].LocaleMessageTime)
+      ) {
+        acc[date][r.PersonGUID] = r;
+      }
+      return acc;
+    }, {});
 
-          <Box display="flex" alignItems="flex-start" sx={{ px: 2, mb: 2, gap: 1 }}>
-            <Box sx={{ width: 200 }}>
-              <LocalizationProvider dateAdapter={AdapterDateFns}>
-                <DatePicker
-                  label="Select date"
-                  value={pickedDate}
-                  onChange={d => { setPickedDate(d); setShowDetails(false); }}
-                  renderInput={params => <TextField fullWidth {...params} sx={datePickerSx} />}
-                />
-              </LocalizationProvider>
-            </Box>
+    const summaryByDate = [];
+    const details = [];
 
-            <Box sx={{ flex: 1, maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Paper elevation={3} sx={{ p: 3, border: '3px solid #000', borderRadius: 2 }}>
-                <Table sx={{ border: '2px solid #000' }} size='small'>
-                  <TableHead>
-                    <TableRow><TableCell colSpan={5} align="center"
-                      sx={{ fontWeight: 'bold', fontSize: 16, bgcolor: '#000', color: '#FFC107', border: '2px solid #000' }}
-                    >
-                      {format(pickedDate, 'EEEE, d MMMM, yyyy')}
-                    </TableCell></TableRow>
-                    <TableRow sx={{ bgcolor: '#FFC107' }}>
-                      {['Country', 'City', 'Employees', 'Contractors', 'Total'].map(h => (
-                        <TableCell key={h} align={h === 'Country' || h === 'City' ? 'left' : 'right'}
-                          sx={{ color: '#000', fontWeight: 'bold', fontSize: 14, border: '2px solid #000' }}>
-                          {h}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {partitionRows.map((r, i) => (
-                      <TableRow key={i}>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.country}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.city}</TableCell>
-                        <TableCell align="right" sx={{ border: '2px solid #000' }}>{r.employee}</TableCell>
-                        <TableCell align="right" sx={{ border: '2px solid #000' }}>{r.contractor}</TableCell>
-                        <TableCell align="right" sx={{ bgcolor: '#FFC107', fontWeight: 'bold', border: '2px solid #000' }}>
-                          {r.total}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow sx={{ bgcolor: '#666' }}>
-                      <TableCell colSpan={2} align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
-                        Total
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
-                        {partitionRows.reduce((s, r) => s + r.employee, 0)}
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
-                        {partitionRows.reduce((s, r) => s + r.contractor, 0)}
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', bgcolor: '#333', border: '2px solid #000' }}>
-                        {partitionRows.reduce((s, r) => s + r.total, 0)}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </Paper>
-              <Box display="flex" justifyContent="center" sx={{ mt: 1 }}>
-                <Button variant="contained" sx={{ bgcolor: '#FFC107', color: '#000' }}
-                  onClick={() => setShowDetails(v => !v)}>
-                  {showDetails ? 'Hide Details' : 'See Details'}
-                </Button>
-                {showDetails && (
-                  <Button variant="outlined" sx={{ ml: 2, borderColor: '#FFC107', color: '#FFC107' }}
-                    onClick={handleExport}>
-                    Export to Excel
-                  </Button>
-                )}
+    // 3) Build summaries
+    Object.keys(byDate).sort().forEach(date => {
+      const recs = Object.values(byDate[date]);
+      details.push(...recs);
 
-                {/* NEW: Export summary button (minimal addition) */}
-                <Button
-                  variant="contained"
-                  sx={{ ml: 2, bgcolor: '#FFC107', color: '#000' }}
-                  onClick={handleExportSummary}
-                >
-                  Export Summary to Excel
-                </Button>
-              </Box>
-            </Box>
+      // region totals
+      const region = { total: 0, Employee: 0, Contractor: 0 };
+      // per-partition buckets
+      const partitions = {};
 
+      recs.forEach(r => {
+        // increment region
+        region.total++;
+        if (isEmployeeType(r.PersonnelType)) region.Employee++;
+        else region.Contractor++;
 
+        // only build partitions if we're not filtering to a single location
+        if (!location) {
+          // use the friendly name (guaranteed non-null!), with fallback
+          const key = r.PartitionNameFriendly || 'APAC.Default';
+          if (!partitions[key]) {
+            partitions[key] = { total: 0, Employee: 0, Contractor: 0 };
+          }
+          partitions[key].total++;
+          if (isEmployeeType(r.PersonnelType)) partitions[key].Employee++;
+          else partitions[key].Contractor++;
+        }
+      });
 
-          </Box>
+      summaryByDate.push({
+        date,
+        day: new Date(date).toLocaleDateString('en-US', { weekday: 'long' }),
+        region: location
+          ? { name: location, ...region }
+          : { name: 'APAC', ...region },
+        // if location is provided, you can still emit an empty object (`{}`) or skip:
+        partitions: location ? {} : partitions
+      });
+    });
+
+    // 4) Return
+    res.json({ success: true, summaryByDate, details });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: 'Historical failed' });
+  }
+};
 
 
 
 
-        ) : (
-          <Box sx={{ px: 2, mb: 3 }}>
-            <LocalizationProvider dateAdapter={AdapterDateFns}>
-              <DatePicker
-                label="Select date"
-                value={pickedDate}
-                onChange={d => { setPickedDate(d); setShowDetails(false); }}
-                renderInput={params => <TextField fullWidth {...params} sx={datePickerSx} />}
-              />
-            </LocalizationProvider>
-            {!pickedDate && (
-              <Typography variant="body1" color="textSecondary" sx={{ mt: 2 }}>
-                Please pick a date to view region summary.
-              </Typography>
-            )}
-          </Box>
-        )}
 
-        {/* ‣ Details */}
-        {showDetails && (
-          <Box display="flex" justifyContent="center" mb={12} sx={{ width: '100%' }}>
-            <Paper elevation={1} sx={{ p: 1, width: '100%', border: '3px solid #000', borderRadius: 2 }}>
-              {detailRows.length > 0 ? (
 
-                // <Table sx={{ border: '2px solid #000', borderCollapse: 'collapse' }}>
 
-                <Table
-                  sx={{
-                    border: '2px solid #000',
-                    borderCollapse: 'collapse',
 
-                  }}
-                  size='small'
-                >
+// src/utils/doorMap.js
 
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: '#000' }}>
-                      {[
-                        'Sr', 'Date', 'Time',
-                        'Employee ID', 'Card Number', 'Name', 'Personnel Type', 'CompanyName', 'PrimaryLocation',
-                        'Door', 'Partition'
-                      ].map(h => (
-                        <TableCell key={h} align="center"
-                          sx={{ color: '#FFC107', fontWeight: 'bold', fontSize: 14, border: '2px solid #000' }}>
-                          {h}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {detailRows.map((r, i) => (
-                      <TableRow key={`${r.PersonGUID}-${i}`}>
-                        <TableCell sx={{ border: '2px solid #000', whiteSpace: 'nowrap' }}>{i + 1}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.LocaleMessageTime.slice(0, 10)}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000', whiteSpace: 'nowrap' }}>
-                          {formatApiTime12(r.LocaleMessageTime)}
-                        </TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.EmployeeID}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.CardNumber}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.ObjectName1}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.PersonnelType}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.CompanyName}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.PrimaryLocation}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.Door}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>
-                          {formatPartition(r.PartitionNameFriendly)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <Typography variant="body2" sx={{ color: '#666', textAlign: 'center', mt: 2, fontStyle: 'italic' }}>
-                  No swipe records found for this date.
-                </Typography>
-              )}
-            </Paper>
-          </Box>
-        )}
-      </Container>
-      <Footer />
-    </>
-  );
+// 1) Raw mapping from “DOOR___Direction” → zone name
+const doorZoneMap = {
+  // Podium / Red
+  "APAC_IN_PUN_PODIUM_RED_IDF ROOM-02-RESTRICTED DOOR___InDirection":                 "Red Zone",
+  "APAC_IN_PUN_PODIUM_ST2 DOOR 1 (RED)___InDirection":                            "Red Zone",
+  "APAC_IN_PUN_PODIUM_ST2 DOOR 1 (RED)___OutDirection":                           "Red Zone",
+  "APAC_IN_PUN_PODIUM_RED_MAIN LIFT LOBBY ENTRY 1-DOOR___InDirection":                 "Red Zone",
+  "APAC_IN_PUN_PODIUM_RED_MAIN LIFT LOBBY ENTRY 1-DOOR___OutDirection":                "Out of office",
+  "APAC_IN_PUN_PODIUM_ST 1-DOOR 1 (RED)___InDirection":                                "Red Zone",
+  "APAC_IN_PUN_PODIUM_ST 1-DOOR 1 (RED)___OutDirection":                               "Red Zone - Outer Area",
+  "APAC_IN_PUN_PODIUM_RED_RECEPTION TO WS ENTRY 1-DOOR NEW___InDirection":             "Red Zone",
+  "APAC_IN_PUN_PODIUM_RED_RECEPTION TO WS ENTRY 1-DOOR NEW___OutDirection":            "Reception Area",
+  "APAC_IN_PUN_PODIUM_RED_RECREATION AREA FIRE EXIT 1-DOOR NEW___InDirection":         "Red Zone",
+  "APAC_IN_PUN_PODIUM_RED_RECREATION AREA FIRE EXIT 1-DOOR NEW___OutDirection":        "Yellow Zone - Outer Area",
+
+  // Podium / Yellow
+  "APAC_IN_PUN_PODIUM_ST2 DOOR 2 (YELLOW)___InDirection":                              "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_ST2 DOOR 2 (YELLOW)___OutDirection":                             "Yellow Zone - Outer Area",
+  "APAC_IN_PUN_PODIUM_YELLOW_MDF RESTRICTED DOOR___InDirection":                       "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_IT STORE ROOM-DOOR RESTRICTED DOOR___InDirection":        "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_REPRO STORE-DOOR RESTRICTED DOOR___InDirection":           "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_CONTROL PANEL ROOM-DOOR RESTRICTED DOOR___InDirection":   "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_PREACTION ROOM-DOOR RESTRICTED DOOR___InDirection":        "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_TESTING LAB-DOOR RESTRICTED DOOR___InDirection":           "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_RECEPTION ENTRY-DOOR___InDirection":                       "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_RECEPTION ENTRY-DOOR___OutDirection":                      "Reception Area",
+  "APAC_IN_PUN_PODIUM_YELLOW_MAIN LIFT LOBBY-DOOR NEW___InDirection":                   "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_MAIN LIFT LOBBY-DOOR NEW___OutDirection":                  "Out of office",
+  "APAC_IN_PUN_PODIUM_ST 1 DOOR 2 (YELLOW)___InDirection":                               "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_ST 1 DOOR 2 (YELLOW)___OutDirection":                              "Yellow Zone - Outer Area",
+  "APAC_IN_PUN_PODIUM_YELLOW_FIRE EXIT 1-DOOR NEW___InDirection":                       "Yellow Zone",
+  "APAC_IN_PUN_PODIUM_YELLOW_FIRE EXIT 1-DOOR NEW___OutDirection":                      "Yellow Zone - Outer Area",
+
+  // Podium / Green
+  "APAC_IN_PUN_PODIUM_GREEN-_IDF ROOM 1-RESTRICTED DOOR___InDirection":                "Green Zone",
+  "APAC_IN_PUN_PODIUM_GREEN_UPS ENTRY 1-DOOR RESTRICTED DOOR___InDirection":            "Green Zone",
+  "APAC_IN_PUN_PODIUM_GREEN_UPS ENTRY 2-DOOR RESTRICTED DOOR___InDirection":            "Green Zone",
+  "APAC_IN_PUN_PODIUM_GREEN_LOCKER HR STORE 3-DOOR RESTRICTED DOOR___InDirection":      "Green Zone",
+  "APAC_IN_PUN_PODIUM_ST4 DOOR 2 (GREEN)___InDirection":                                "Green Zone",
+  "APAC_IN_PUN_PODIUM_GREEN-MAIN LIFT LOBBY-DOOR___InDirection":                        "Green Zone",
+  "APAC_IN_PUN_PODIUM_GREEN-MAIN LIFT LOBBY-DOOR___OutDirection":                       "Green Zone - Outer Area",
+  "APAC_IN_PUN_PODIUM_ST3 DOOR 2 (GREEN)___InDirection":                                "Green Zone",
+  "APAC_IN_PUN_PODIUM_ST3 DOOR 2 (GREEN)___OutDirection":                               "Green Zone - Outer Area",
+  "APAC_IN_PUN_PODIUM_GREEN_RECEPTION ENTRY-DOOR___InDirection":                        "Green Zone",
+  "APAC_IN_PUN_PODIUM_GREEN_RECEPTION ENTRY-DOOR___OutDirection":                       "Reception Area",
+
+  // Podium / Orange
+  "APAC_IN_PUN_PODIUM_ST4 DOOR 1 (ORANGE)___InDirection":                               "Orange Zone",
+  "APAC_IN_PUN_PODIUM_ORANGE_RECEPTION ENTRY-DOOR___InDirection":                      "Orange Zone",
+  "APAC_IN_PUN_PODIUM_ORANGE_RECEPTION ENTRY-DOOR___OutDirection":                     "Reception Area",
+  "APAC_IN_PUN_PODIUM_ST3_DOOR 1 (ORANGE)___InDirection":                              "Orange Zone",
+  "APAC_IN_PUN_PODIUM_ST3_DOOR 1 (ORANGE)___OutDirection":                             "Orange Zone",
+  "APAC_IN_PUN_PODIUM_ORANGE_MAIN LIFT LOBBY-DOOR___InDirection":                       "Orange Zone",
+  "APAC_IN_PUN_PODIUM_ORANGE_MAIN LIFT LOBBY-DOOR___OutDirection":                      "Orange Zone - Outer Area",
+  "APAC_IN_PUN_PODIUM_ORANGE-IDF ROOM 3-RESTRICTED DOOR___InDirection":                "Orange Zone",
+  "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR NEW___InDirection":            "Orange Zone",
+  "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR NEW___OutDirection":           "Orange Zone - Outer Area",
+
+  // Podium / GSOC door
+  "APAC_IN_PUN_PODIUM_GSOC DOOR RESTRICTED DOOR___InDirection":                         "Yellow Zone",
+
+  // Podium / Main Right & Left Entry
+  "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR NEW___InDirection":                  "Reception Area",
+  "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR NEW___OutDirection":                 "Assembly Area",
+  "APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW___InDirection":                   "Reception Area",
+  "APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW___OutDirection":                  "Assembly Area",
+
+  // Podium / Turnstiles
+  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1-DOOR___InDirection":                               "Reception Area",
+  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 2-DOOR___InDirection":                               "Reception Area",
+  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 3-DOOR___InDirection":                               "Reception Area",
+  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 4-DOOR___InDirection":                               "Reception Area",
+  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 2 -OUT DOOR___OutDirection":                         "Out of office",
+  "APAC_IN_PUN-PODIUM_P-1 TURNSTILE 3 -OUT DOOR___OutDirection":                         "Out of office",
+  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 4 -OUT DOOR___OutDirection":                         "Out of office",
+  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1-OUT DOOR___OutDirection":                          "Out of office",
+
+  "APAC_IN_PUN-PODIUM_P-1 TURNSTILE 3 -OUT DOOR___OutDirection":    "Out of office",
+  "APAC_IN_PUN-PODIUM_P-1 TURNSTILE 3 -OUT DOOR___InDirection":    "Reception Area",
+  
+
+
+
+  // 2nd-Floor / IDF + UPS/ELEC + Reception→Workstation + LiftLobby→Reception
+  "APAC_IN_PUN_2NDFLR_IDF ROOM_10:05:86 RESTRICTED DOOR___InDirection":                  "2nd Floor, Pune",
+  "APAC_IN_PUN_2NDFLR_UPS/ELEC ROOM RESTRICTED DOOR___InDirection":                      "2nd Floor, Pune",
+  "APAC_IN_PUN_2NDFLR_RECPTION TO WORKSTATION DOOR___InDirection":                       "2nd Floor, Pune",
+  "APAC_IN_PUN_2NDFLR_RECPTION TO WORKSTATION DOOR___OutDirection":                      "Out of office",
+  "APAC_IN_PUN_2NDFLR_LIFTLOBBY TO RECEPTION EMTRY DOOR___InDirection":                   "2nd Floor, Pune",
+  "APAC_IN_PUN_2NDFLR_LIFTLOBBY TO RECEPTION EMTRY DOOR___OutDirection":                  "2nd Floor, Pune",
+
+  // Tower B
+  "APAC_IN_PUN_TOWER B_MAIN RECEPTION DOOR___InDirection":                               "Tower B",
+  "APAC_IN_PUN_TOWER B_MAIN RECEPTION DOOR___OutDirection":                              "Out of office",
+  "APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR___InDirection":                                   "Tower B",
+  "APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR___OutDirection":                                  "Out of office",
+  "APAC_IN_PUN_TOWER B_ST6_GYM SIDE DOOR___InDirection":                                 "Tower B",
+  "APAC_IN_PUN_TOWER B_ST6_GYM SIDE DOOR___OutDirection":                                "Tower B",
+  "APAC_IN_PUN_TOWER B_ST6_WKS SIDE DOOR___InDirection":                                 "Tower B",
+  "APAC_IN_PUN_TOWER B_ST6_WKS SIDE DOOR___OutDirection":                                "Tower B",
+  "APAC_IN_PUN_TOWER B_ST5_KAPIL DEV DOOR___InDirection":                                "Tower B",
+  "APAC_IN_PUN_TOWER B_ST5_KAPIL DEV DOOR___OutDirection":                               "Tower B",
+  "APAC_IN_PUN_TOWER B_ST5_WKS SIDE DOOR___InDirection":                                 "Tower B",
+  "APAC_IN_PUN_TOWER B_ST5_WKS SIDE DOOR___OutDirection":                                "Tower B",
+  "APAC_IN_PUN_TOWER B_RECEPTION LEFT DOOR___InDirection":                               "Tower B",
+  "APAC_IN_PUN_TOWER B_RECEPTION LEFT DOOR___OutDirection":                              "Tower B",
+  "APAC_IN_PUN_TOWER B_RECEPTION RIGHT DOOR___InDirection":                              "Tower B",
+  "APAC_IN_PUN_TOWER B_RECEPTION RIGHT DOOR___OutDirection":                             "Tower B",
+  "APAC_IN_PUN_TOWER B_IBMS ROOM___InDirection":                                         "Tower B",
+  "APAC_IN_PUN_TOWER B_UPS ROOM___InDirection":                                          "Tower B",
+  "APAC_IN_PUN_TOWER B_MDF ROOM___InDirection": "Tower B",
+  "APAC_IN_PUN_TOWER B_PAC ROOM___InDirection": "Tower B",
+  "APAC_IN_PUN_TOWER B_IT STORE ROOM___InDirection": "Tower B",
+  "APAC_IN_PUN_TOWER B_GYM ROOM___InDirection": "Tower B GYM",
+  "APAC_IN_PUN_TOWER B_GYM ROOM___OutDirection": "Tower B GYM",
+  "APAC_IN_PUN_TOWER B_SITE OPS STORE___InDirection": "Tower B",
+  "APAC_IN_PUN_TOWER B_MOBILE LAB___InDirection": "Tower B",
+  "APAC_IN_PUN_TOWER B_MOBILE LAB___OutDirection": "Tower B",
+  "APAC_IN_PUN_TOWER B_CEC DOOR___InDirection": "Tower B",
+  "APAC_IN_PUN_TOWER B_CEC DOOR___OutDirection": "Tower B",
+
+ // ----- APAC-wide (from your Excel file) -----
+  // Kuala Lumpur
+  "APAC_MY_KL_MAIN ENTRANCE DOOR___InDirection":    "Kuala Lumpur",
+  "APAC_MY_KL_MAIN ENTRANCE DOOR___OutDirection":  "Out of office",
+  "APAC_MY_KL_INTERIOR RECEPTION DOOR___InDirection":"Kuala Lumpur",
+  "APAC_MY_KL_INTERIOR RECEPTION DOOR___OutDirection":"Kuala Lumpur",
+  "APAC_MY_KL_SIDE ENTRANCE DOOR NEW___InDirection":"Kuala Lumpur",
+  "APAC_MY_KL_SIDE ENTRANCE DOOR NEW___OutDirection":"Kuala Lumpur",
+  "APAC_MY_KL_PANTRY ENTRANCE DOOR NEW___InDirection":"Kuala Lumpur",
+  "APAC_MY_KL_PANTRY ENTRANCE DOOR NEW___OutDirection":"Kuala Lumpur",
+  "APAC_MY_KL_SERVER ROOM DOOR___InDirection":     "Kuala Lumpur",
+  "APAC_MY_KL_SERVER ROOM DOOR___OutDirection":    "Kuala Lumpur",
+
+  // Tokyo
+  "APAC_JPN_Tokyo_7th FLRSide Entrance___InDirection":"Tokyo",
+  "APAC_JPN_Tokyo_7th FLRSide Entrance___OutDirection":"Out of office",
+  "APAC_JPN_Tokyo_7th FLR_IT Room___InDirection":     "Tokyo",
+  "APAC_JPN_Tokyo_7th FLR_IT Room___OutDirection":    "Tokyo",
+  "APAC_JPN_Tokyo_7th FLR_Main Entrance___InDirection":"Tokyo",
+  "APAC_JPN_Tokyo_7th FLR_Main Entrance___OutDirection":"Out of office",
+  "APAC_JPN_Tokyo_7th FLR_Office Entrance___InDirection":"Tokyo",
+  "APAC_JPN_Tokyo_7th FLR_Office Entrance___OutDirection":"Tokyo",
+  "APAC_JPN_Tokyo_7th FLR_Side Entrance to Back Office___InDirection":"Tokyo",
+  "APAC_JPN_Tokyo_7th FLR_Side Entrance to Back Office___OutDirection":"Out of office",
+
+  // Manila (6th & 7th Floor)
+  "APAC_PH_Manila_6th Floor Enrty Door 1___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor Enrty Door 1___OutDirection":"Out of office",
+  "APAC_PH_Manila_6th Floor Open Office 2___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor Open Office 2___OutDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_Entry Door 2___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_Entry Door 2___OutDirection":"Out of office",
+  "APAC_PH_Manila_6th Floor_Entry Door 3___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_Entry Door 3___OutDirection":"Out of office",
+  "APAC_PH_Manila_6th Floor_Exit Corridor___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_Exit Corridor___OutDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_IDF Restricted Door___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_IDF Restricted Door___OutDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_Mothers Room___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_Mothers Room___OutDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_Print Area___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_Print Area___OutDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_UPS/Switch Restricted Door___InDirection":"6th Floor",
+  "APAC_PH_Manila_6th Floor_UPS/Switch Restricted Door___OutDirection":"6th Floor",
+
+  "APAC_PH_Manila_7th Floor_Directors Office-708___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Directors Office-708___OutDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Exit Corridore-704___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Exit Corridore-704___OutDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_IT Work Room  725___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_IT Work Room  725___OutDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_MDF-726 Restricted Door___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_MDF-726 Restricted Door___OutDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Open Office Door 1-721___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Open Office Door 1-721___OutDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Open Office Door 2-721___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Open Office Door 2-721___OutDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Pantry-720a___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Pantry-720a___OutDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Recption Door 1-701___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Recption Door 1-701___OutDirection":"Out of office",
+  "APAC_PH_Manila_7th Floor_Recption Door 2-701___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Recption Door 2-701___OutDirection":"Out of office",
+  "APAC_PH_Manila_7th Floor_Security Room-723___InDirection":"7th Floor",
+  "APAC_PH_Manila_7th Floor_Security Room-723___OutDirection":"7th Floor",
+
+  // PI Manila DR (Taguig)
+  "APAC_PI_Manila_DR_MainEntrance___InDirection":"Taguig",
+  "APAC_PI_Manila_DR_MainEntrance___OutDirection":"Out of office",
+  "APAC_PI_Manila_DR_OfficeLobby___InDirection":"Taguig",
+  "APAC_PI_Manila_DR_OfficeLobby___OutDirection":"Out of office",
+  "APAC_PI_Manila_DR_Server Restricted Door___InDirection":"Taguig",
+  "APAC_PI_Manila_DR_Server Restricted Door___OutDirection":"Taguig",
+  "APAC_PI_Manila_DR_StorageRm___InDirection":"Taguig",
+  "APAC_PI_Manila_DR_StorageRm___OutDirection":"Taguig",
+  "APAC_PI_Manila_Emerg Exit Dr- Lobby___InDirection":"Taguig",
+  "APAC_PI_Manila_Emerg Exit Dr- Lobby___OutDirection":"Taguig",
+  "APAC_PI_Manila_Emgerg DR_Storage RM___InDirection":"Taguig",
+  "APAC_PI_Manila_Emgerg DR_Storage RM___OutDirection":"Taguig",
+
+
+
+
+// --- Manila 7th Floor Reception Doors ---
+"APAC_PH_Manila_7th Floor Recption Door 1-701___InDirection":    "7th Floor",
+"APAC_PH_Manila_7th Floor Recption Door 1-701___OutDirection":   "Out of office",
+
+"APAC_PH_Manila_7th Floor Recption Door 2-701___InDirection":    "7th Floor",
+"APAC_PH_Manila_7th Floor Recption Door 2-701___OutDirection":   "Out of office",
+
+// --- Manila 7th Floor Open Office Door 2-721 ---
+"APAC_PH_Manila_7th Floor Open Office Door 2-721___InDirection":  "7th Floor",
+"APAC_PH_Manila_7th Floor Open Office Door 2-721___OutDirection": "7th Floor",
+
+// --- Manila 7th Floor IT Work Room  725 & Security Room 723 ---
+"APAC_PH_Manila_7th Floor IT Work Room  725___InDirection":      "7th Floor",
+"APAC_PH_Manila_7th Floor IT Work Room  725___OutDirection":     "7th Floor",
+
+"APAC_PH_Manila_7th Floor Security Room-723___InDirection":      "7th Floor",
+"APAC_PH_Manila_7th Floor Security Room-723___OutDirection":     "7th Floor",
+
+// --- Manila 6th Floor variants ---
+"APAC_PH_Manila_6th Floor Enrty Door 1___InDirection":           "6th Floor",
+"APAC_PH_Manila_6th Floor Enrty Door 1___OutDirection":          "Out of office",
+
+"APAC_PH_Manila_6th Floor Print Area___InDirection":             "6th Floor",
+"APAC_PH_Manila_6th Floor Print Area___OutDirection":            "6th Floor",
+
+"APAC_PH_Manila_6th Floor Entry Door 2___InDirection":           "6th Floor",
+"APAC_PH_Manila_6th Floor Entry Door 2___OutDirection":          "Out of office",
+
+"APAC_PH_Manila_6th Floor Entry Door 3___InDirection":           "6th Floor",
+"APAC_PH_Manila_6th Floor Entry Door 3___OutDirection":          "6th Floor",
+
+// --- Pune Tower B Lift Lobby Door (OutDirection) ---
+"APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR___OutDirection":            "Out of office",
+
+// --- Pune Turnstile 1 Exit Door (normalize the hyphen) ---
+"APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1 OUT DOOR___OutDirection":    "Out of office",
+
+// --- Taguig Main Entrance Door (InDirection) ---
+"APAC_PI_Manila_DR_MainEntrance___InDirection":                  "Taguig",
+"APAC_PI_Manila_DR_MainEntrance___OutDirection":                 "Out of office",
+
+// --- Tokyo 7th Floor Office Entrance (OutDirection) ---
+"APAC_JPN_Tokyo_7th FLR Office Entrance___OutDirection":        "Out of office",
+
+};
+
+
+
+
+// 2) zone → floor
+const zoneFloorMap = {
+
+  "Red Zone":                    "Podium Floor",
+  "Yellow Zone":                 "Podium Floor",
+  "Reception Area":              "Podium Floor",
+  "Green Zone":                  "Podium Floor",
+  "Orange Zone":                 "Podium Floor",
+  "Gsoc Zone":                   "Podium Floor",
+  "Assembly Area":               "Podium Floor",
+  "Red":"Podium Floor",
+
+  // 2nd Floor
+  "2nd Floor, Pune":             "2nd Floor",
+
+  // Tower B
+  "Tower B":                     "Tower B",
+  "Reception Area Tower B":      "Tower B",
+  "Tower B GYM":                 "Tower B",
+
+  // Outer‐Area variants (same floors as their base zones)
+  "Red Zone - Outer Area":               "Podium Floor",
+  "Yellow Zone - Outer Area":            "Podium Floor",
+  "Reception Area - Outer Area":         "Podium Floor",
+  "Green Zone - Outer Area":             "Podium Floor",
+  "Orange Zone - Outer Area":            "Podium Floor",
+  "Assembly Area - Outer Area":          "Podium Floor",
+  "2nd Floor, Pune - Outer Area":        "2nd Floor",
+  "Tower B - Outer Area":                "Tower B",
+  "Reception Area Tower B - Outer Area": "Tower B",
+  "Tower B GYM - Outer Area":            "Tower B",
+
+  // True “Out of office” eviction (we filter these out in the controller)
+  
+
+  "Kuala Lumpur":             "Kuala Lumpur",
+  "6th Floor":                "6th Floor",
+  "7th Floor":                "7th Floor",
+  "Tokyo":                    "Tokyo",
+  "Taguig":                   "Taguig",
+  // All true “Out of office” go to Unknown:
+  "Out of office":            null
+};
+
+
+// 3) How to derive partition for PartitionName2
+// 3) Partition → friendly name
+const partitionMap = {
+  'APAC_IN_PUN':    'Pune',
+  'APAC_PH_Manila': 'Quezon City',
+  'APAC_JPN_Tokyo': 'JP.Tokyo',
+  'APAC_MY_KL':     'MY.Kuala Lumpur',
+  'APAC_PI_Manila': 'Taguig City'
+};
+
+
+
+function normalizeDoorName(name) {
+  return name
+    .replace(/[_/]/g, ' ')                      // underscores/slashes → spaces
+    .replace(/[^\w\s-]/g, '')                   // drop punctuation except hyphens
+    .replace(/\bRECPTION\b/gi, 'RECEPTION')     // typo fix
+    .replace(/\bENRTY\b|\bENTRTY\b/gi, 'ENTRY') // typo fix
+   // strip any trailing 6-digit hex string (e.g. "10054B")
+   .replace(/\b[0-9A-F]{6}\b$/, '')
+    .replace(/[\s-]+/g, ' ')                    // collapse spaces & hyphens
+    .toUpperCase()
+    .trim();
 }
 
 
 
+// 5) Build normalized door→zone lookup
+const normalizedDoorZoneMap = Object.entries(doorZoneMap).reduce((acc, [rawKey, zone]) => {
+  const [rawDoor, direction] = rawKey.split('___');
+  const normKey = `${normalizeDoorName(rawDoor)}___${direction}`;
+  acc[normKey] = zone;
+  return acc;
+}, {});
+
+// 6) Build per-partition doorMap entries
+const doorMap = Object.entries(doorZoneMap).reduce((acc, [rawKey, zone]) => {
+  const [rawDoor, direction] = rawKey.split('___');
+  const prefix    = rawDoor.split('_').slice(0,3).join('_');
+  const partition = partitionMap[prefix] || prefix;
+  const floor     = zoneFloorMap[zone]  || 'Unknown';
+
+  if (!acc[rawDoor]) {
+    acc[rawDoor] = {
+      partition,
+      door: rawDoor,
+      inDirectionFloor:  null,
+      outDirectionFloor: null,
+      normalizedDoor:    normalizeDoorName(rawDoor)
+    };
+  }
+  if (direction === 'InDirection')  acc[rawDoor].inDirectionFloor  = floor;
+  else                              acc[rawDoor].outDirectionFloor = floor;
+
+  return acc;
+}, {});
+
+// 7) Export
+module.exports = {
+  doorZoneMap,
+  normalizedDoorZoneMap,
+  zoneFloorMap,
+  doorMap: Object.values(doorMap),
+  normalizeDoorName
+};
 
 
 
@@ -637,26 +1081,7 @@ const handleExportSummary = async () => {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// src/pages/PartitionDetailDetails.jsx
+// D:\DASHBOARD\apac-occupancy-frontend\src\pages\PartitionDetailDetails.jsx
 
 import React, { useEffect, useState, useMemo } from "react";
 import {
@@ -1019,44 +1444,6 @@ export default function PartitionDetailDetails() {
     </>
   );
 }
-
-
-
-
-
-///////////
-///////////
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

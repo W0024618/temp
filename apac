@@ -1,3 +1,53 @@
+// ===== REPLACE THE OLD "Counting loop ..." BLOCK WITH THIS =====
+
+// Counting loop — use 'details' (enriched & already filtered) as the single source of truth
+const ensureBucket = (part) => {
+  if (!realtime[part]) realtime[part] = { total:0, Employee:0, Contractor:0, floors:{}, zones:{} };
+};
+
+details.forEach(r => {
+  const p = r.PartitionName2;
+
+  // details already filtered to remove "Out of office"; skip Unknown/Unmapped zones
+  if (!r.Zone) return;
+
+  ensureBucket(p);
+
+  // totals
+  realtime[p].total++;
+  if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+  else                                  realtime[p].Contractor++;
+
+  // floor: prefer enriched Floor, otherwise fallback to lookupFloor
+  let fl = r.Floor;
+  if (!fl) {
+    const lf = lookupFloor(p, r.Door, r.Direction, unmapped);
+    if (lf !== 'Unknown') fl = lf;
+  }
+  if (fl && fl !== 'Unknown') {
+    realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
+  }
+
+  // zone: mapDoorToZone already normalized the zone during enrichment.
+  // For OutDirection ensure trailing " Zone" is stripped (if any)
+  let z = r.Zone;
+  if (r.Direction === 'OutDirection' && z && z !== 'Out of office') {
+    z = z.replace(/\s+Zone$/i, '');
+  }
+  if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
+});
+
+
+
+
+
+
+
+
+
+
+
+
 // ---- inside exports.getLiveSummary = async (req,res) => { ... } ----
 
 // Build enriched details (add Zone & Floor) for every last-swipe record

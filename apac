@@ -1,3 +1,150 @@
+// ---- inside exports.getLiveSummary = async (req,res) => { ... } ----
+
+// Build enriched details (add Zone & Floor) for every last-swipe record
+const enriched = Object.values(last).map(r => {
+  const zone = mapDoorToZone(r.Door, r.Direction);
+  const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmapped);
+
+  return {
+    ...r,
+    Zone: zone === 'Unknown Zone' ? null : zone,
+    Floor: floor === 'Unknown' ? null : floor
+  };
+});
+
+// We'll collect only the PersonGUIDs that actually got counted into realtime
+const included = new Set();
+
+// Counting loop (keeps Pune special logic but enforces strict drop on "Out of office")
+Object.values(last).forEach(r => {
+  const p = r.PartitionName2;
+
+  // determine zone again for each record (use mapDoorToZone to be consistent)
+  const zoneRaw = mapDoorToZone(r.Door, r.Direction);
+
+  // STRICT RULE: if zone resolved to exact "Out of office" -> skip counting
+  if (zoneRaw === 'Out of office') return;
+
+  // Unknown keys → drop
+  if (zoneRaw === 'Unknown Zone') return;
+
+  // ensure bucket exists when we decide to count
+  const ensureBucket = (part) => {
+    if (!realtime[part]) realtime[part] = { total:0, Employee:0, Contractor:0, floors:{}, zones:{} };
+  };
+
+  if (r.Direction === 'OutDirection') {
+    // allow certain valid OutDirection zones (Assembly Area, Reception Area, ...)
+    const allowedOutZones = new Set(['Assembly Area', 'Reception Area']);
+    if (!zoneRaw.endsWith('Outer Area') && !allowedOutZones.has(zoneRaw)) {
+      return;
+    }
+
+    // safe to count
+    ensureBucket(p);
+    realtime[p].total++;
+    if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+    else                                  realtime[p].Contractor++;
+
+    // floor bucket
+    const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
+    if (fl !== 'Unknown') {
+      realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
+    }
+
+    // zone bucket (clean trailing " Zone" for OutDirection cases where appropriate)
+    const z = (r.Direction === 'OutDirection' && zoneRaw !== 'Out of office')
+                ? zoneRaw.replace(/\s+Zone$/i, '')
+                : zoneRaw;
+    if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
+
+    // mark this person as included in realtime counts
+    included.add(r.PersonGUID);
+
+    return;
+  }
+
+  // ── All other partitions (existing logic) ──
+  const normKey = normalizeDoorName(r.Door) + '___' + r.Direction;
+  let zone = normalizedDoorZoneMap[normKey];
+  if (!zone) {
+    const entry = doorMap.find(d =>
+      d.normalizedDoor === normalizeDoorName(r.Door) &&
+      d.partition === p
+    );
+    zone = entry
+      ? (r.Direction === 'InDirection'
+          ? normalizedDoorZoneMap[`${entry.normalizedDoor}___InDirection`]
+          : normalizedDoorZoneMap[`${entry.normalizedDoor}___OutDirection`])
+      : null;
+  }
+
+  // if resolved zone (via fallback) is "Out of office" → skip (strict)
+  if (zone === 'Out of office') return;
+
+  // ok to count
+  ensureBucket(p);
+  realtime[p].total++;
+  if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+  else                                  realtime[p].Contractor++;
+
+  const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
+  if (fl !== 'Unknown') {
+    realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
+  }
+
+  const z = zone ? (r.Direction === 'OutDirection' && zone !== 'Out of office' ? zone.replace(/\s+Zone$/i, '') : zone) : null;
+  if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
+
+  // mark this person as included
+  included.add(r.PersonGUID);
+});
+
+// Build details to exactly match who we counted in realtime
+const details = enriched.filter(r => included.has(r.PersonGUID));
+
+
+
+
+
+
+
+
+
+
+// 1) Filter the raw details → keep only In/Out for this partition,
+//    map to include floor, then drop any that resolve to "Unmapped"/"Unknown"/null
+const filterAndMap = json =>
+  (json.details || [])
+    .filter(r =>
+      r.PartitionName2 === partition &&
+      (r.Direction === "InDirection" || r.Direction === "OutDirection")
+    )
+    .map(r => {
+      // reuse frontend lookupFloor utility to compute display floor
+      const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction);
+      return { ...r, floor };
+    })
+    // normalize: drop entries where floor is null/undefined/Unknown/Unmapped
+    .filter(r => r.floor && r.floor !== "Unknown" && r.floor !== "Unmapped");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 In APAC Dashboard Quezon City 6th floor and 7th Floor and In Pune Tower b 
 Display mismatch count need to fix .
 Debug each Code line by line and fix the issue carefully..

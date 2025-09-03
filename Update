@@ -1,367 +1,256 @@
+In Laca live Summary in Frontend Display Total 6 count but in details Section sisplay only 3 entry .
+When i review and debug file there is issue in frontend display 3 entry . Which swipe Direction is "Direction": "IntDirection",
+      "Floor": "Building B1"
+
+But it remove 
+"Direction": "OutDirection",
+      "Floor": "Building B1"
+so Basically our logic is Strickly remove Count from Realtime Details When Zone or Floor = Out  of Office only..
+if Direction is InDirection or OutDirection and  floor or Zone is not equal to Out of office then dont rewmove their Count...
+if Direction is InDirection or OutDirection and Floor or Zone is Out of Office then strickly remove their count from realtime Details..
+
+so i have found this issue in laca file strickly solve this issue carefully ...
+Check below Laca Controller file as well Frontend file and fix this issue carefully...
 
 
-// src/pages/History.jsx
-
-import React, { useEffect, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
-import {
-  Container,
-  Box,
-  Button,
-  Typography,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Paper,
-  TextField
-} from '@mui/material';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { format } from 'date-fns';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-
-import Header from '../components/Header';
-import Footer from '../components/Footer';
-import LoadingSpinner from '../components/LoadingSpinner';
-import { fetchHistory } from '../api/occupancy.service';
-
-export default function History() {
-  const { partition } = useParams();
-  const decodedPartition = partition ? decodeURIComponent(partition) : null;
-  const filterCode = decodedPartition?.split('.')[0] || null;
-
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [pickedDate, setPickedDate] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
-
-  // 1) pick summary for the date
-  const summaryEntry = useMemo(() => {
-    if (!data || !pickedDate) return null;
-    const ds = format(pickedDate, 'yyyy-MM-dd');
-    return data.summaryByDate.find(r =>
-      r.date === ds || r.date.startsWith(ds)
-    ) || null;
-  }, [data, pickedDate]);
-
-  // 2) build partitionRows (unchanged)
-  const partitionRows = useMemo(() => {
-    if (!summaryEntry) return [];
-    const codeToCountry = {
-      AR: 'Argentina',
-      BR: 'Brazil',
-      CR: 'Costa Rica',
-      MX: 'Mexico',
-      PA: 'Panama',
-      PE: 'Peru'
-    };
-    return Object.entries(summaryEntry.partitions)
-      .filter(([key]) =>
-        !filterCode ? true : key.startsWith(filterCode + '.')
-      )
-      .map(([key, v]) => {
-        const [code, cityRaw] = key.split('.');
-        return {
-          country: codeToCountry[code] || code,
-          city: cityRaw.replace('Partition', '').trim(),
-          employee: v.Employee ?? v.EmployeeCount ?? 0,
-          contractor: v.Contractor ?? v.ContractorCount ?? 0,
-          tempBadge: v.TempBadge ?? 0,
-          total: v.total ?? 0,
-        };
-      });
-  }, [summaryEntry, filterCode]);
-
-  // 3) build detailRows exactly like APAC:
-  const detailRows = useMemo(() => {
-    if (!data || !pickedDate || !showDetails) return [];
-    const ds = format(pickedDate, 'yyyy-MM-dd');
-
-    // filter by date field (SwipeDate OR LocaleMessageTime) & partition
-    const filtered = data.details.filter(r => {
-
-      // const inDay = (r.SwipeDate && r.SwipeDate.startsWith(ds))
-      //   || format(new Date(r.LocaleMessageTime), 'yyyy-MM-dd') === ds;
+//C:\Users\W0024618\Desktop\laca-occupancy-backend\src\controllers\occupancy.controller.js
 
 
-      const inDay = (r.SwipeDate && r.SwipeDate.startsWith(ds))
-        || (r.LocaleMessageTime && r.LocaleMessageTime.slice(0, 10) === ds); 
-
-      const inPartition = !filterCode
-        || r.PartitionName2.startsWith(filterCode + '.');
-      return inDay && inPartition;
-    });
-
-    // sort oldest → newest
-    // filtered.sort((a,b) =>
-    //   new Date(a.LocaleMessageTime) - new Date(b.LocaleMessageTime)
-    // );
+const service = require('../services/occupancy.service');
+const doorMap = require('../utils/doorMap'); 
 
 
 
-    filtered.sort((a, b) =>
-      (a.LocaleMessageTime || '').localeCompare(b.LocaleMessageTime || '')
-    );
+exports.getLiveOccupancy = async (req, res) => {
+  try {
+    const data = await service.fetchLiveOccupancy();
+    res.json({ success: true, count: data.length, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Live occupancy fetch failed' });
+  }
+};
+
+
+/**
+ * Returns true if this PersonnelType counts as Employee.
+ * Everything else (including blank) counts as Contractor.
+ */
+
+function isEmployeeType(pt) {
+  return pt === 'Employee'
+      || pt === 'Terminated Employee'
+      || pt === 'Terminated Personnel';
+}
+
+/**
+ * Returns true if this PersonnelType is a Temp Badge.
+ */
+// function isTempBadgeType(pt) {
+//   return pt === 'Temp Badge';
+// }
+
+
+function isTempBadgeType(pt) {
+  // handle both variants from the database
+  return pt === 'Temp Badge' || pt === 'TempBadge';
+}
 
 
 
-    // dedupe by PersonGUID, keep first
-    const seen = new Set();
-    return filtered.filter(r => {
-      if (seen.has(r.PersonGUID)) return false;
-      seen.add(r.PersonGUID);
-      return true;
-    });
-  }, [data, pickedDate, showDetails, filterCode]);
-
-  // fetch on mount
-  useEffect(() => {
-    setLoading(true);
-    fetchHistory()
-      .then(json => setData(json))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <LoadingSpinner />;
-  if (!data) return null;
-
-  // Export
-  const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(
-      detailRows.map((r, i) => ({
-        Sr: i + 1,
-        // Date: format(new Date(r.LocaleMessageTime), 'yyyy-MM-dd'),
-         Date:
-        (r.LocaleMessageTime && r.LocaleMessageTime.slice(0, 10)) ||
-        (r.SwipeDate && r.SwipeDate.slice(0, 10)) ||
-        '',
-        Time: formatApiTime12(r.LocaleMessageTime),
-        EmployeeID: r.EmployeeID,
-        Name: r.ObjectName1,
-        PersonnelType: r.PersonnelType,
-        CardNumber: r.CardNumber,
-        Door: r.Door,
-        Partition: r.PartitionName2
-      }))
-    );
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Details');
-    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([buf]), `history_${format(pickedDate, 'yyyyMMdd')}.xlsx`);
-  };
-
-  const isCostaRica = filterCode === 'CR';
-
-
-
-  // Interpret the API ISO string as UTC text (no timezone conversion),
-  // extract the HH:mm:ss and return 12-hour formatted "hh:mm:ss AM/PM".
-  const formatApiTime12 = (iso) => {
-    if (!iso || typeof iso !== 'string') return '';
-
-    // Try to extract HH:mm:ss from ISO (handles "2025-09-01T00:15:57.000Z"
-    // and also a few other common variants).
-    const m = iso.match(/T?(\d{2}):(\d{2}):(\d{2})/);
-    if (!m) return '';
-
-    const hh = parseInt(m[1], 10);
-    const mm = m[2];
-    const ss = m[3];
-
-    if (Number.isNaN(hh)) return `${m[1]}:${mm}:${ss}`;
-
-    // convert to 12-hour
-    let h12 = hh % 12;
-    if (h12 === 0) h12 = 12;
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-
-    return `${String(h12).padStart(2, '0')}:${mm}:${ss} ${ampm}`;
-  };
-  return (
-    <>
-      <Header />
-      <Container maxWidth={false} disableGutters sx={{ pt: 2, pb: 4 }}>
-        {pickedDate && summaryEntry ? (
-          <Box display="flex" alignItems="flex-start" sx={{ px: 2, mb: 2, gap: 1 }}>
-            {/* DatePicker */}
-            <Box sx={{ width: 200 }}>
-              <LocalizationProvider dateAdapter={AdapterDateFns}>
-                <DatePicker
-                  label="Select date"
-                  value={pickedDate}
-                  onChange={d => { setPickedDate(d); setShowDetails(false); }}
-                  renderInput={params => <TextField fullWidth {...params} />}
-                />
-              </LocalizationProvider>
-            </Box>
-            {/* Summary */}
-            <Box sx={{ flex: 1, maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Paper elevation={3} sx={{ px: 4, py: 3, border: '3px solid #000', borderRadius: 2 }}>
-                <Table sx={{ border: '2px solid #000' }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell colSpan={isCostaRica ? 6 : 5} align="center"
-                        sx={{ fontWeight: 'bold', fontSize: 16, bgcolor: '#000', color: '#fff', border: '2px solid #000' }}
-                      >
-                        {format(pickedDate, 'EEEE, d MMMM, yyyy')}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow sx={{ bgcolor: '#FFC107' }}>
-                      {[
-                        'Country', 'City', 'Employee', 'Contractors',
-                        ...(isCostaRica ? ['Temp Badge'] : []),
-                        'Total'
-                      ].map(h => (
-                        <TableCell key={h}
-                          align={['Country', 'City'].includes(h) ? 'left' : 'right'}
-                          sx={{ color: '#000', fontWeight: 'bold', fontSize: 14, border: '2px solid #000' }}
-                        >{h}</TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {partitionRows.map((row, i) => (
-                      <TableRow key={i}>
-                        <TableCell sx={{ border: '2px solid #000' }}>{row.country}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{row.city}</TableCell>
-                        <TableCell align="right" sx={{ border: '2px solid #000' }}>{row.employee}</TableCell>
-                        <TableCell align="right" sx={{ border: '2px solid #000' }}>{row.contractor}</TableCell>
-                        {isCostaRica && (
-                          <TableCell align="right" sx={{ border: '2px solid #000' }}>{row.tempBadge}</TableCell>
-                        )}
-                        <TableCell align="right" sx={{ bgcolor: '#FFC107', fontWeight: 'bold', border: '2px solid #000' }}>
-                          {row.total}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow sx={{ bgcolor: '#666' }}>
-                      <TableCell colSpan={2} align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
-                        Total
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
-                        {partitionRows.reduce((s, r) => s + r.employee, 0)}
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
-                        {partitionRows.reduce((s, r) => s + r.contractor, 0)}
-                      </TableCell>
-                      {isCostaRica && (
-                        <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
-                          {partitionRows.reduce((s, r) => s + r.tempBadge, 0)}
-                        </TableCell>
-                      )}
-                      <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', bgcolor: '#333', border: '2px solid #000' }}>
-                        {partitionRows.reduce((s, r) => s + r.total, 0)}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </Paper>
-              {/* Details toggle & export */}
-              <Box display="flex" justifyContent="center" sx={{ mt: 1 }}>
-                <Button variant="contained" sx={{ bgcolor: '#FFC107', color: '#000' }}
-                  onClick={() => setShowDetails(v => !v)}>
-                  {showDetails ? 'Hide Details' : 'See Details'}
-                </Button>
-                {showDetails && (
-                  <Button variant="outlined" sx={{ ml: 2, borderColor: '#FFC107', color: '#FFC107' }}
-                    onClick={handleExport}>
-                    Export to Excel
-                  </Button>
-                )}
-              </Box>
-            </Box>
-          </Box>
-        ) : (
-          <Box sx={{ px: 2, mb: 3 }}>
-            <LocalizationProvider dateAdapter={AdapterDateFns}>
-              <DatePicker
-                label="Select date"
-                value={pickedDate}
-                onChange={d => { setPickedDate(d); setShowDetails(false); }}
-                renderInput={params => <TextField fullWidth {...params} />}
-              />
-            </LocalizationProvider>
-            {!pickedDate && (
-              <Typography variant="body1" color="textSecondary" sx={{ mt: 2 }}>
-                Please pick a date to view region summary.
-              </Typography>
-            )}
-          </Box>
-        )}
-
-        {/* Details table */}
-        {showDetails && (
-          <Box display="flex" justifyContent="center" mb={2} sx={{ width: '100%' }}>
-            <Paper elevation={1} sx={{ px: 4, py: 1, width: '100%', border: '3px solid #000', borderRadius: 2 }}>
-              {detailRows.length > 0 ? (
-                <Table sx={{ border: '2px solid #000', borderCollapse: 'collapse' }}>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: '#000' }}>
-                      {[
-                        'Sr', 'Date', 'Time',
-                        'Employee ID', 'Name', 'Personnel Type',
-                        'Card Number', 'Door', 'Partition'
-                      ].map(h => (
-                        <TableCell key={h} align="center"
-                          sx={{ color: '#FFC107', fontWeight: 'bold', fontSize: 14, border: '2px solid #000' }}
-                        >{h}</TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {detailRows.map((r, i) => (
-                      <TableRow key={`${r.PersonGUID}-${i}`}>
-                        <TableCell sx={{ border: '2px solid #000' }}>{i + 1}</TableCell>
-                        {/*                         
-                        <TableCell sx={{border:'2px solid #000'}}>
-                          {format(new Date(r.LocaleMessageTime),'yyyy-MM-dd')}
-                        </TableCell> */}
-
-                        <TableCell sx={{ border: '2px solid #000' }}>
-                          {(r.LocaleMessageTime && r.LocaleMessageTime.slice(0, 10)) || (r.SwipeDate && r.SwipeDate.slice(0, 10)) || ''}
-                        </TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>
-                          {formatApiTime12(r.LocaleMessageTime)}
-                        </TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.EmployeeID}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.ObjectName1}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.PersonnelType}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.CardNumber}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.Door}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.PartitionName2}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <Typography variant="body2" sx={{ color: '#666', textAlign: 'center', mt: 2, fontStyle: 'italic' }}>
-                  No swipe records found for this date.
-                </Typography>
-              )}
-            </Paper>
-          </Box>
-        )}
-      </Container>
-      <Footer />
-    </>
+/**
+ * Look up floor for a given record by matching door + partition.
+ */
+function lookupFloor(partition, door, direction, unmappedSet) {
+  const entry = doorMap.find(d =>
+    d.partition === partition && d.door === door
   );
+  if (!entry) {
+    unmappedSet.add(`${partition} | ${door}`);
+    return null;
+  }
+  return direction === 'InDirection'
+    ? entry.inDirectionFloor
+    : entry.outDirectionFloor;
 }
 
 
 
 
+// exports.getLiveSummary = async (req, res) => {
+//   try {
+//     const swipes = await service.fetchLiveOccupancy();
+
+//     // 1. TODAY’S HEADCOUNT: first swipe per person
+//     const firstByPerson = {};
+//     swipes.forEach(r => {
+//       const prev = firstByPerson[r.PersonGUID];
+//       const t = new Date(r.LocaleMessageTime).getTime();
+//       if (!prev || t < new Date(prev.LocaleMessageTime).getTime()) {
+//         firstByPerson[r.PersonGUID] = r;
+//       }
+//     });
+//     const todayRecs = Object.values(firstByPerson);
+//     const today = { total: 0, Employee: 0, Contractor: 0, TempBadge: 0 };
+//     todayRecs.forEach(r => {
+//       today.total++;
+//       if (isTempBadgeType(r.PersonnelType)) today.TempBadge++;
+//       else if (isEmployeeType(r.PersonnelType)) today.Employee++;
+//       else today.Contractor++;
+//     });
+
+//     // 2. REAL-TIME: last swipe per person, only InDirection
+//     const lastByPerson = {};
+//     swipes.forEach(r => {
+//       const prev = lastByPerson[r.PersonGUID];
+//       const t = new Date(r.LocaleMessageTime).getTime();
+//       if (!prev || t > new Date(prev.LocaleMessageTime).getTime()) {
+//         lastByPerson[r.PersonGUID] = r;
+//       }
+//     });
+
+//     const realtime = {};
+//     const unmappedDoors = new Set();
+//     Object.values(lastByPerson).forEach(r => {
+//       // if (r.Direction !== 'InDirection') return;
+//      // ● only remove if this door truly maps to "Out of office"
+//      if (r.Direction === 'OutDirection') {
+//        const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+//        if (floor === 'Out of office' || floor?.trim() === 'Out of office') {
+//          return; // true exit → evict
+//        }
+//        // otherwise fall through and count them
+//      }
+
+
+//       const p = r.PartitionName2;
+//       // initialize, including TempBadge for CR
+//       if (!realtime[p]) {
+//         realtime[p] = { total: 0, Employee: 0, Contractor: 0 };
+//         if (p === 'CR.Costa Rica Partition') realtime[p].TempBadge = 0;
+//         realtime[p].floors = {};
+//       }
+//       realtime[p].total++;
+//       if (isTempBadgeType(r.PersonnelType)) realtime[p].TempBadge++;
+//       else if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+//       else realtime[p].Contractor++;
+
+//       const floor = lookupFloor(p, r.Door, r.Direction, unmappedDoors) || 'Unmapped';
+//       realtime[p].floors[floor] = (realtime[p].floors[floor] || 0) + 1;
+//     });
+
+//     if (unmappedDoors.size) {
+//       console.warn('Unmapped doors:\n' + Array.from(unmappedDoors).join('\n'));
+//     }
+
+//     return res.json({
+//       success: true,
+//       today,
+//       realtime,
+//       details: Object.values(lastByPerson)
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ success: false, message: 'Live summary failed' });
+//   }
+// };
 
 
 
 
+exports.getLiveSummary = async (req, res) => {
+  try {
+    const swipes = await service.fetchLiveOccupancy();
 
+    // 1. TODAY’S HEADCOUNT: first swipe per person
+    const firstByPerson = {};
+    swipes.forEach(r => {
+      const prev = firstByPerson[r.PersonGUID];
+      const t = new Date(r.LocaleMessageTime).getTime();
+      if (!prev || t < new Date(prev.LocaleMessageTime).getTime()) {
+        firstByPerson[r.PersonGUID] = r;
+      }
+    });
+    const todayRecs = Object.values(firstByPerson);
+    const today = { total: 0, Employee: 0, Contractor: 0, TempBadge: 0 };
+    todayRecs.forEach(r => {
+      today.total++;
+      if (isTempBadgeType(r.PersonnelType)) today.TempBadge++;
+      else if (isEmployeeType(r.PersonnelType)) today.Employee++;
+      else today.Contractor++;
+    });
 
+    // 2. REAL-TIME: last swipe per person, with strict removal for Floor == "Out of office"
+    const lastByPerson = {};
+    swipes.forEach(r => {
+      const prev = lastByPerson[r.PersonGUID];
+      const t = new Date(r.LocaleMessageTime).getTime();
+      if (!prev || t > new Date(prev.LocaleMessageTime).getTime()) {
+        lastByPerson[r.PersonGUID] = r;
+      }
+    });
 
+    const realtime = {};
+    const unmappedDoors = new Set();
 
+    Object.values(lastByPerson).forEach(r => {
+      // Resolve mapped floor up-front (populates unmappedDoors when needed)
+      const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+      const floorNorm = rawFloor ? String(rawFloor).trim().toLowerCase() : '';
 
+      // STRICT RULE: if resolved Floor equals "out of office" -> skip counting entirely
+      if (floorNorm === 'out of office') {
+        return;
+      }
+
+      const p = r.PartitionName2;
+      // initialize, including TempBadge for CR
+      if (!realtime[p]) {
+        realtime[p] = { total: 0, Employee: 0, Contractor: 0 };
+        if (p === 'CR.Costa Rica Partition') realtime[p].TempBadge = 0;
+        realtime[p].floors = {};
+      }
+
+      realtime[p].total++;
+      if (isTempBadgeType(r.PersonnelType)) realtime[p].TempBadge++;
+      else if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
+      else realtime[p].Contractor++;
+
+      // add to floor bucket, using 'Unmapped' when lookup fails
+      const normFloor = rawFloor ? String(rawFloor).trim() : 'Unmapped';
+      realtime[p].floors[normFloor] = (realtime[p].floors[normFloor] || 0) + 1;
+    });
+
+    if (unmappedDoors.size) {
+      console.warn('Unmapped doors:\n' + Array.from(unmappedDoors).join('\n'));
+    }
+
+    // Build enriched details with Floor added, but filter out any whose Floor is "Out of office"
+    const details = Object.values(lastByPerson)
+      .map(r => {
+        const rawFloor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmappedDoors);
+        const floor = rawFloor ? String(rawFloor).trim() : null;
+        return {
+          ...r,
+          Floor: floor
+        };
+      })
+      .filter(d => {
+        const f = d.Floor;
+        return !(f && String(f).trim().toLowerCase() === 'out of office');
+      });
+
+    return res.json({
+      success: true,
+      today,
+      realtime,
+      details
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: 'Live summary failed' });
+  }
+};
 
 
 
@@ -630,5 +519,9 @@ export default function PartitionDetailDetails() {
     </>
   );
 }
+
+
+
+
 
 

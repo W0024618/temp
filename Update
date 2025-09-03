@@ -1,560 +1,50 @@
 
 
-// src/pages/PartitionDetailDetails.jsx
-
-import React, { useEffect, useState, useMemo } from "react";
-import {
-  Container, Box, Typography, Button, TextField,
-  Paper, TableContainer, Table, TableHead, TableRow, TableCell, TableBody
-} from "@mui/material";
-import { useParams, useNavigate } from "react-router-dom";
-
-import Header from "../components/Header";
-import Footer from "../components/Footer";
-import LoadingSpinner from "../components/LoadingSpinner";
-import DataTable from "../components/DataTable";
-import ExcelJS from 'exceljs';
-import { fetchLiveSummary } from "../api/occupancy.service";
-import { lookupFloor } from "../utils/floorLookup";
-
-
-
-import { saveAs } from 'file-saver';
-
-
-
-export default function PartitionDetailDetails() {
-  const { partition } = useParams();
-  const navigate = useNavigate();
-
-  const [details, setDetails] = useState([]);
-  const [liveCounts, setLiveCounts] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState("");
-  const [search, setSearchTerm] = useState("");
-  const [expandedFloor, setExpandedFloor] = useState(null);
-
-
-  // Helper: format API ISO (UTC) to "hh:mm:ss AM/PM"
-  const formatApiDateTime = iso => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (isNaN(d)) return iso;
-
-    const hours24 = d.getUTCHours();
-    const minutes = String(d.getUTCMinutes()).padStart(2, "0");
-    const seconds = String(d.getUTCSeconds()).padStart(2, "0");
-
-    const ampm = hours24 >= 12 ? "PM" : "AM";
-    let hour12 = hours24 % 12;
-    if (hour12 === 0) hour12 = 12;
-    const hourStr = String(hour12).padStart(2, "0");
-
-    return `${hourStr}:${minutes}:${seconds} ${ampm}`;
-  };
-
-
-
-  // 2) add this export handler inside the component (place it after formatApiDateTime and before the return)
-  // const handleExportFloor = (floor, emps) => {
-  //   if (!emps || emps.length === 0) return;
-
-  //   // build rows: header + data
-  //   const rows = [
-  //     ['Emp ID', 'Name', 'Swipe Time', 'Type', 'Company', 'Direction','Card', 'Door'],
-  //     ...emps.map(r => [
-  //       r.EmployeeID ?? '',
-  //       r.ObjectName1 ?? '',
-  //       formatApiDateTime(r.LocaleMessageTime),
-  //       r.PersonnelType ?? '',
-  //       r.CompanyName ?? '',
-  //       r.Direction ?? '',
-  //       r.CardNumber ?? '',
-  //       r.Door ?? ''
-  //     ])
-  //   ];
-
-  //   // convert to sheet & workbook
-  //   const ws = XLSX.utils.aoa_to_sheet(rows);
-  //   const wb = XLSX.utils.book_new();
-  //   XLSX.utils.book_append_sheet(wb, ws, 'FloorExport');
-
-  //   // filename safe floor name + timestamp
-  //   const safeFloor = floor.replace(/[^a-z0-9\-_]/gi, '_').slice(0, 80);
-  //   const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  //   const filename = `${partition || 'partition'}_${safeFloor}_${ts}.xlsx`;
-
-  //   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  //   saveAs(new Blob([buf]), filename);
-  // };
-
-
-
-
-
-
-  const handleExportFloor = async (floor, emps) => {
-  if (!emps || emps.length === 0) return;
-
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("FloorExport");
-
-  // --- Header row ---
-  const headers = [
-    "Emp ID",
-    "Name",
-    "Swipe Time",
-    "Type",
-    "Company",
-    "Direction",
-    "Card",
-    "Door"
-  ];
-  const headerRow = sheet.addRow(headers);
-  headerRow.eachCell(cell => {
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "8b8c8f" } // Yellow
-    };
-    cell.alignment = { horizontal: "center", vertical: "middle" };
-    cell.border = {
-      top: { style: "thin" },
-      left: { style: "thin" },
-      bottom: { style: "thin" },
-      right: { style: "thin" }
-    };
-  });
-
-  // --- Data rows ---
-  emps.forEach(r => {
-    const row = sheet.addRow([
-      r.EmployeeID ?? "",
-      r.ObjectName1 ?? "",
-      formatApiDateTime(r.LocaleMessageTime),
-      r.PersonnelType ?? "",
-      r.CompanyName ?? "",
-      r.Direction ?? "",
-      r.CardNumber ?? "",
-      r.Door ?? ""
-    ]);
-
-    row.eachCell(cell => {
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" }
-      };
-    });
-  });
-
-  // --- Auto column width ---
-  sheet.columns.forEach(col => {
-    let maxLen = 7;
-    col.eachCell({ includeEmpty: true }, c => {
-      maxLen = Math.max(maxLen, (c.value ? c.value.toString().length : 0) + 2);
-    });
-    col.width = Math.min(Math.max(maxLen, 17), 40);
-  });
-
-  // --- Filename (safe floor name + timestamp) ---
-  const safeFloor = floor.replace(/[^a-z0-9\-_]/gi, "_").slice(0, 80);
-  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  const filename = `${safeFloor}_${ts}.xlsx`;
-
-  // --- Save file ---
-  const buf = await workbook.xlsx.writeBuffer();
-  saveAs(new Blob([buf]), filename);
-};
-
-
-
-  // 1) Filter the raw details → keep only In/Out for this partition,
-  //    map to include floor, then drop any that resolve to "Unmapped"
-  const filterAndMap = json =>
-    json.details
-      .filter(r =>
-        r.PartitionName2 === partition &&
-        (r.Direction === "InDirection" || r.Direction === "OutDirection")
-      )
-      .map(r => {
-        const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction);
-        return { ...r, floor };
-      })
-      .filter(r => r.floor !== "Unmapped");  // remove any Out-of-office / unmapped
-
-  // initial load
-  useEffect(() => {
-    let active = true;
-    fetchLiveSummary().then(json => {
-      if (!active) return;
-      setLiveCounts(json.realtime[partition]?.floors || {});
-      setDetails(filterAndMap(json));
-      setLastUpdate(new Date().toLocaleTimeString());
-      setLoading(false);
-    });
-    return () => { active = false };
-  }, [partition]);
-
-  // poll every second
-  useEffect(() => {
-    const iv = setInterval(async () => {
-      const json = await fetchLiveSummary();
-      setLiveCounts(json.realtime[partition]?.floors || {});
-      setDetails(filterAndMap(json));
-      setLastUpdate(new Date().toLocaleTimeString());
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [partition]);
-
-  // group by floor name
-  const floorMap = useMemo(() => {
-    const m = {};
-    Object.keys(liveCounts).forEach(f => { m[f] = [] });
-    details.forEach(r => {
-      if (!m[r.floor]) m[r.floor] = [];
-      m[r.floor].push(r);
-    });
-    return m;
-  }, [details, liveCounts]);
-
-  // apply search filter to each floor's list
-  // const displayed = useMemo(() => {
-  //   const term = search.toLowerCase();
-  //   return Object.entries(floorMap)
-  //     .map(([floor, emps]) => {
-  //       const filtered = emps.filter(e =>
-  //         floor.toLowerCase().includes(term) ||
-  //         e.ObjectName1?.toLowerCase().includes(term) ||
-  //         `${e.EmployeeID}`.toLowerCase().includes(term) ||
-  //         `${e.CardNumber}`.toLowerCase().includes(term)
-  //       );
-  //       return [floor, filtered];
-  //     })
-  //     .filter(([, emps]) => emps.length > 0);
-
-
-  // }, [floorMap, search]);
-
-
-
-  // apply search filter to each floor's list
-  const displayed = useMemo(() => {
-    const term = search.toLowerCase();
-
-    const arr = Object.entries(floorMap)
-      .map(([floor, emps]) => {
-        const filtered = emps.filter(e =>
-          floor.toLowerCase().includes(term) ||
-          e.ObjectName1?.toLowerCase().includes(term) ||
-          `${e.EmployeeID}`.toLowerCase().includes(term) ||
-          `${e.CardNumber}`.toLowerCase().includes(term)
-        );
-        return [floor, filtered];
-      })
-      .filter(([, emps]) => emps.length > 0);
-
-    // ✅ sort by length descending (largest totals first)
-    arr.sort((a, b) => b[1].length - a[1].length);
-
-    return arr;
-  }, [floorMap, search]);
-
-
-
-  const columns = [
-    { field: "EmployeeID", headerName: "Emp ID" },
-    { field: "ObjectName1", headerName: "Name" },
-    { field: "LocaleMessageTime", headerName: "Swipe Time" },
-    { field: "PersonnelType", headerName: "Type" },
-    { field: "CompanyName", headerName: "Company" }, // <-- ADD THIS LINE
-    { field: "Direction", headerName: "Direction" }, // <-- ADD THIS LINE
-    { field: "CardNumber", headerName: "Card" },
-    { field: "Door", headerName: "Door" },
-  ];
-
-  if (loading) {
-    return (
-      <>
-        <Header />
-        <Box sx={{ px: 2, py: 8 }}><LoadingSpinner /></Box>
-        <Footer />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <Header />
-      <Box sx={{ pt: 1, pb: 1, background: "rgba(0,0,0,0.6)" }}>
-        <Container disableGutters maxWidth={false}>
-
-          {/* Back button + title */}
-          <Box display="flex" alignItems="center" mb={2} sx={{ px: 2 }}>
-            <Button size="small" onClick={() => navigate(-1)} sx={{ color: "#FFC107" }}>
-              ← Back to Overview
-            </Button>
-          </Box>
-
-          {/* Search + timestamp */}
-          <Box display="flex" alignItems="center" gap={2} mb={2} sx={{ px: 2 }}>
-            <Typography variant="h6" sx={{ color: "#FFC107" }}>
-              Floor Details
-            </Typography>
-
-            {/* <Typography variant="body2" sx={{ color: "#FFC107" }}>
-              Last updated: {lastUpdate}
-            </Typography> */}
-
-            <TextField
-              size="small"
-              placeholder="Search floor / emp…"
-              value={search}
-              onChange={e => setSearchTerm(e.target.value)}
-              sx={{
-                "& .MuiInputBase-input": { color: "#FFC107" },
-                "& .MuiOutlinedInput-root fieldset": { borderColor: "#FFC107" }
-              }}
-            />
-          </Box>
-
-           {/* 3) replace the floor card JSX (the displayed.map rendering) with this updated version */}
-          {/* Floor cards */}
-          <Box display="flex" flexWrap="wrap" width="100%" sx={{ px: 2 }}>
-            {displayed.map(([floor, emps]) => (
-              <Box key={floor} sx={{ width: "50%", p: 2 }}>
-                <Paper sx={{
-                  border: "2px solid #FFC107",
-                  p: 2,
-                  background: "rgba(0,0,0,0.4)"
-                }}>
-                  {/* Header row: left = floor title, right = export button */}
-                  <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                    <Typography
-                      variant="subtitle1"
-                      fontWeight={600}
-                      sx={{ color: "#FFC107" }}
-                    >
-                      {floor} (Total {emps.length})
-                    </Typography>
-
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => handleExportFloor(floor, emps)}
-                      sx={{ bgcolor: '#FFC107', color: '#000', textTransform: 'none' }}
-                    >
-                      Export
-                    </Button>
-                  </Box>
-
-                  <TableContainer
-                    component={Paper}
-                    variant="outlined"
-                    sx={{ mb: 1, background: "rgba(0,0,0,0.4)" }}
-                  >
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow sx={{ bgcolor: "#000" }}>
-                          {["Emp ID", "Name", "Swipe Time", "Type", "Company","Direction", "Card", "Door"].map(h => (
-                            <TableCell
-                              key={h}
-                              sx={{
-                                color: "#FFC107",
-                                border: "1px solid #FFC107",
-                                fontWeight: "bold"
-                              }}
-                            >
-                              {h}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {emps.slice(0, 10).map((r, i) => (
-                          <TableRow key={i}>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.EmployeeID}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.ObjectName1}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {formatApiDateTime(r.LocaleMessageTime)}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.PersonnelType}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.CompanyName}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.Direction}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.CardNumber}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.Door}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-
-                  <Button
-                    size="small"
-                    onClick={() => setExpandedFloor(f => f === floor ? null : floor)}
-                    sx={{ color: "#FFC107" }}
-                  >
-                    {expandedFloor === floor ? "Hide" : "See more…"}
-                  </Button>
-                </Paper>
-              </Box>
-            ))}
-          </Box>
-
-
-
-          {/* Expanded table */}
-          {expandedFloor && (
-            <Box sx={{ px: 2, mt: 2 }}>
-              <Typography variant="h6" sx={{ color: "#FFC107" }} gutterBottom>
-                {expandedFloor} — All Entries
-              </Typography>
-
-              <DataTable
-                // add a Sr No column only for the expanded table (keeps original `columns` unchanged)
-                columns={[{ field: "SrNo", headerName: "Sr No" }, ...columns]}
-                rows={(floorMap[expandedFloor] || []).map((r, i) => ({
-                  ...r,
-                  LocaleMessageTime: formatApiDateTime(r.LocaleMessageTime),
-                  SrNo: i + 1 // 1,2,3...
-                }))}
-              />
-            </Box>
-          )}
-
-
-
-
-
-        </Container>
-      </Box>
-      <Footer />
-    </>
-  );
-}
-
-
-
-
-
-///////////
-///////////
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// src/pages/History.jsx — APAC Edition
+// C:\Users\W0024618\Desktop\emea-occupancy-frontend\src\pages\History.jsx
+// src/pages/History.jsx
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  Container,
-  Box,
-  Button,
-  Typography,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Paper,
-  TextField,
-  TableContainer
+  Container, Box, Button, Typography, Table,
+  TableHead, TableBody, TableRow, TableCell, TableContainer,
+  Paper, TextField
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { format } from 'date-fns';
-
-
-import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-
+import ExcelJS from "exceljs";
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { fetchHistory } from '../api/occupancy.service';
 
-// APAC display mapping
-const apacPartitionDisplay = {
-  'IN.Pune': { country: 'India', city: 'Pune' },
-  'MY.Kuala Lumpur': { country: 'Malaysia', city: 'Kuala Lumpur' },
-  'PH.Quezon': { country: 'Philippines', city: 'Quezon City' },
-  'PH.Taguig': { country: 'Philippines', city: 'Taguig' },
-  'JP.Tokyo': { country: 'Japan', city: 'Tokyo' },
-};
 
-// FE ↔ BE keys
-const apacForwardKey = {
-  'IN.Pune': 'Pune',
-  'MY.Kuala Lumpur': 'MY.Kuala Lumpur',
-  'PH.Quezon': 'Quezon City',
-  'PH.Taguig': 'Taguig City',
-  'JP.Tokyo': 'JP.Tokyo',
-};
-const apacReverseKey = Object.fromEntries(
-  Object.entries(apacForwardKey).map(([fe, be]) => [be, fe])
-);
+const partitionToDisplay = {
+  'AUT.Vienna': { city: 'Vienna', country: 'Austria' },
+  'DU.Abu Dhab': { city: 'Dubai', country: 'UAE' },
+  'IE.Dublin': { city: 'Dublin', country: 'Ireland' },
+  'LT.Vilnius': { city: 'Vilnius', country: 'Lithuania' },
 
-// helper to display “Quezon City” → “Quezon City”
-const formatPartition = key => {
-  const fe = apacReverseKey[key];
-  return fe
-    ? apacPartitionDisplay[fe].city
-    : key;
-};
+  'MA.Casablanca': { city: 'Casablanca', country: 'Morocco' },
+  'RU.Moscow': { city: 'Moscow', country: 'Russia' },
+  'UK.London': { city: 'London', country: 'UK' },
+  'ES.Madrid': { city: 'Madrid', country: 'Spain' }
 
-// helper: unify the key format used by companyRows and detailRows
-const makeCompanyKey = (country, city, company) => `${country}||${city}||${company}`;
+};
 
 
 export default function History() {
-  const { partition } = useParams();
-  const decodedPartition = partition ? decodeURIComponent(partition) : null;
-  const backendFilterKey = decodedPartition
-    ? apacForwardKey[decodedPartition] || decodedPartition
-    : null;
+  const { partition: partitionParam } = useParams();
+  const decodedKey = partitionParam ? decodeURIComponent(partitionParam) : null;
+
+  // Wrap in useMemo to keep stable across renders
+  const filteredPartitionKeys = useMemo(
+    () => decodedKey ? [decodedKey] : Object.keys(partitionToDisplay),
+    [decodedKey]
+  );
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -562,512 +52,406 @@ export default function History() {
   const [showDetails, setShowDetails] = useState(false);
 
 
-
-
   // new: company click/filter state
   const [selectedCompany, setSelectedCompany] = useState(null);
 
+  // Interpret the ISO string as UTC and return hh:mm:ss AM/PM (no local timezone conversion)
+  const formatApiTime12 = (iso) => {
+    if (!iso || typeof iso !== 'string') return '';
+    // Expect ISO like "2025-09-01T03:35:14.000Z"
+    const hh = iso.slice(11, 13);
+    const mm = iso.slice(14, 16);
+    const ss = iso.slice(17, 19);
+    if (!hh || !mm || !ss) return '';
+    let h = parseInt(hh, 10);
+    if (Number.isNaN(h)) return `${hh}:${mm}:${ss}`;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    let h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+    return `${String(h12).padStart(2, '0')}:${mm}:${ss} ${ampm}`;
+  };
 
-  useEffect(() => {
-    setLoading(true);
-    fetchHistory(decodedPartition)
-      .then(json => {
-        setData(json);
-      })
-      .finally(() => setLoading(false));
-  }, [decodedPartition]);
 
 
-  // clear company selection when date changes
-  useEffect(() => {
-    setSelectedCompany(null);
-  }, [pickedDate]);
+  const getIsoDate = (r) =>
+    (r?.SwipeDate && r.SwipeDate.slice(0, 10))
+    || (r?.LocaleMessageTime && r.LocaleMessageTime.slice(0, 10))
+    || '';
 
 
+
+
+
+
+
+  // canonical company resolution: normalize & group common variants
+  const getCanonicalCompany = (r) => {
+    // helper: normalize a string to lower-case, remove punctuation, collapse spaces
+    const normalize = (s) => {
+      if (!s) return '';
+      return String(s)
+        .toLowerCase()
+        .normalize('NFKD')              // normalize diacritics
+        .replace(/[\u0300-\u036f]/g, '')// strip accents
+        .replace(/[^a-z0-9\s]/g, ' ')   // remove punctuation, keep letters/numbers/spaces
+        .replace(/\s+/g, ' ')           // collapse multiple spaces
+        .trim();
+    };
+
+    const raw = r.CompanyName && String(r.CompanyName).trim();
+    const pt = (r.PersonnelType && String(r.PersonnelType).toLowerCase()) || '';
+
+    // 1) If CompanyName exists, try to canonicalize it
+    if (raw) {
+      const n = normalize(raw);
+
+      // ----- WU / Western Union family -> map to single canonical name -----
+      if (
+        n.includes('western union') ||
+        n.startsWith('wu ') ||
+        n.startsWith('wui') ||
+        n.includes('wuprocessing') ||
+        n.includes('wupay') ||
+        n.includes('wu pay') ||
+        n.includes('wups') ||
+        n.includes('wupsm') ||
+        n.includes('wu retail') ||
+        n.includes('wu financial') ||
+        n.includes('westernunion') ||
+        n.includes('westernunionfin') ||
+        n.includes('western union fin') ||
+        n.includes('western union payment') ||
+        (n.includes('payment services') && n.includes('western'))
+      ) {
+        return 'WU Srvcs India Private Ltd';
+      }
+
+      // ----- Addendum family -----
+      if (n.includes('addendum')) {
+        return 'Addendum Solutions';
+      }
+
+      // ----- G4S family -----
+      if (n.includes('g4s')) {
+        return 'G4S Secure Solutions';
+      }
+
+      // ----- UAB family (Lithuania / UAB prefix) -----
+      if (n.startsWith('uab ') || n.includes(' uab ') || n.includes('uab')) {
+        return 'UAB';
+      }
+
+      // ----- Other catch-alls -----
+      if (n === 'unknown' || n === '') return 'Unknown';
+
+      // If none matched, return the original raw (preserve capitalization)
+      return raw;
+    }
+
+    // 2) No CompanyName: infer from PersonnelType
+    // Check more specific cases first
+    if (pt.includes('contractor')) return 'Contractor';
+    if (pt.includes('property') || pt.includes('property management')) return 'Property Management';
+    if (pt.includes('temp')) return 'Temp Badge';
+    if (pt.includes('visitor')) return 'Visitor';
+
+    // fallback
+    return 'Unknown';
+  };
+
+  // 1) Find the summary entry for the chosen date
   const summaryEntry = useMemo(() => {
     if (!data || !pickedDate) return null;
     const ds = format(pickedDate, 'yyyy-MM-dd');
-    return data.summaryByDate.find(r =>
-      r.date === ds || r.date.startsWith(ds)
-    ) || null;
+    return data.summaryByDate.find(r => r.date === ds) || null;
   }, [data, pickedDate]);
 
+  // 2) Build that summary table’s rows
   const partitionRows = useMemo(() => {
     if (!summaryEntry) return [];
-    if (backendFilterKey && summaryEntry.region) {
-      const fe = Object.keys(apacPartitionDisplay).find(
-        code => apacForwardKey[code] === backendFilterKey || code === backendFilterKey
-      );
-      const disp = fe ? apacPartitionDisplay[fe] : {};
-      return [{
-        country: disp.country || 'Unknown',
-        city: disp.city || backendFilterKey.replace(' City', ''),
-        employee: summaryEntry.region.Employee || 0,
-        contractor: summaryEntry.region.Contractor || 0,
-        total: summaryEntry.region.total || 0
-      }];
-    }
-    return Object.entries(summaryEntry.partitions).map(([key, v]) => {
-      const fe = Object.entries(apacForwardKey).find(([, be]) =>
-        be === key || `${be} City` === key
-      )?.[0];
-      const disp = fe
-        ? apacPartitionDisplay[fe]
-        : Object.values(apacPartitionDisplay)
-          .find(d => d.city === key.replace(' City', ''));
-      return {
-        country: disp?.country || 'Unknown',
-        city: disp?.city || key.replace(' City', ''),
-        employee: v.Employee || v.EmployeeCount || 0,
-        contractor: v.Contractor || v.ContractorCount || 0,
-        total: v.total || 0
-      };
-    });
-  }, [summaryEntry, backendFilterKey]);
-
-
-
-  const formatApiTime12 = iso => {
-    if (!iso) return "";
-    // get HH:MM:SS part from ISO like "2025-08-28T10:22:33.000Z"
-    const tp = (iso && iso.slice(11, 19)) || "";
-    if (!tp) return "";
-    const [hStr, mStr, sStr] = tp.split(':');   // ✅ now include seconds
-    const hh = parseInt(hStr, 10);
-    if (Number.isNaN(hh)) return tp;
-    let h12 = hh % 12;
-    if (h12 === 0) h12 = 12;
-    const ampm = hh >= 12 ? "PM" : "AM";
-    return `${String(h12).padStart(2, "0")}:${mStr}:${sStr} ${ampm}`;
-  };
-
-
-  // --- company name normalizer ---
-  // keep it deterministic and conservative (only maps the families you listed)
-  const normalizeCompany = (raw) => {
-    if (!raw) return 'Unknown';
-    // trim and collapse whitespace
-    const orig = String(raw).trim();
-    const s = orig
-      .toLowerCase()
-      // remove punctuation commonly causing variants
-      .replace(/[.,()\/\-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // Poona / Poona Security family
-    if (/\bpoona\b/.test(s) || /\bpoona security\b/.test(s) || /\bpoona security india\b/.test(s)) {
-      return 'Poona Security India Pvt Ltd';
-    }
-
-    // Western Union family (map many variants to single canonical)
-    if (
-      /\bwestern union\b/.test(s) ||
-      /\bwesternunion\b/.test(s) ||
-      /\bwu\b/.test(s) ||           // WU standalone
-      /\bwufs\b/.test(s) ||         // WUFS variants
-      /\bwu technology\b/.test(s) ||
-      /\bwu srvcs\b/.test(s) ||
-      /\bwestern union svs\b/.test(s) ||
-      /\bwestern union processing\b/.test(s) ||
-      /\bwestern union japan\b/.test(s) ||
-      /\bwestern union, llc\b/.test(s)
-    ) {
-      return 'Western Union';
-    }
-
-    // Vedant family
-    if (/\bvedant\b/.test(s)) {
-      return 'Vedant Enterprises Pvt. Ltd';
-    }
-
-    // Osource family
-    if (/\bosource\b/.test(s)) {
-      return 'Osource India Pvt Ltd';
-    }
-
-    // CBRE family
-    if (/\bcbre\b/.test(s)) {
-      return 'CBRE';
-    }
-
-    // explicit Unknown canonical
-    if (s === 'unknown' || s === '') return 'Unknown';
-
-    // otherwise return the original trimmed string (preserve casing)
-    return orig;
-  };
-
-
-
-  // helper: compute canonical company for a single detail row (same logic used by companyRows)
-  const getCanonicalCompany = (r) => {
-    const rawCompany = (r.CompanyName || '').toString().trim();
-    const pt = (r.PersonnelType || '').toString().trim().toLowerCase();
-    const s = rawCompany.toLowerCase();
-
-    // If CompanyName contains CBRE and also mention of CLR or Facility -> CLR canonical
-    if (s && /\bcbre\b/.test(s) && (/\bclr\b/.test(s) || /\bfacilit/i.test(s))) {
-      return 'CLR Facility Services Pvt.Ltd.';
-    }
-
-    // If CompanyName is explicitly CBRE (or normalizes to CBRE)
-    // and PersonnelType indicates Property Management -> map to CLR Facility Services
-    if (s && (s === 'cbre' || normalizeCompany(rawCompany) === 'CBRE')) {
-      if (pt.includes('property') || pt.includes('management') || pt === 'property management') {
-        // NEW: map CBRE + Property Management -> CLR Facility Services (single canonical)
-        return 'CLR Facility Services Pvt.Ltd.';
-      }
-      // otherwise keep as CBRE
-      return 'CBRE';
-    }
-
-    // If CompanyName is blank -> use PersonnelType fallback rules
-    if (!rawCompany) {
-      if (pt.includes('contractor')) return 'CBRE';
-      if (pt.includes('property') || pt.includes('management') || pt === 'property management') {
-        // blank company but property-management -> CLR Facility Services (same canonical)
-        return 'CLR Facility Services Pvt.Ltd.';
-      }
-      if (pt === 'employee') return 'Western Union';
-      if (pt.includes('visitor')) return 'Visitor';
-      if (pt.includes('temp')) return 'Temp Badge';
-      return 'Unknown';
-    }
-
-    // otherwise use normalizeCompany for other families
-    return normalizeCompany(rawCompany);
-  };
+    const codeToCountry = { US: 'United States', CA: 'Canada' };
+    return Object.entries(summaryEntry.partitions)
+      .filter(([key]) => filteredPartitionKeys.includes(key))
+      .map(([key, vals]) => {
+        const disp = partitionToDisplay[key];
+        const country = disp
+          ? disp.country
+          : codeToCountry[key.split('.')[0]] || key;
+        const city = disp ? disp.city : key;
+        return {
+          country,
+          city,
+          employee: vals.Employee ?? 0,
+          contractor: vals.Contractor ?? 0,
+          total: vals.total ?? 0
+        };
+      });
+  }, [summaryEntry, filteredPartitionKeys]);
 
 
   const detailRows = useMemo(() => {
-    if (!data || !pickedDate || !showDetails) return [];
+    if (!data || !pickedDate) return [];
     const ds = format(pickedDate, 'yyyy-MM-dd');
 
-    return data.details
-      .filter(r => {
-        // match date
-        if (!r.LocaleMessageTime || r.LocaleMessageTime.slice(0, 10) !== ds) return false;
+    // a) all swipes that day for our partitions (defensive check for LocaleMessageTime)
+    // const all = data.details.filter(r =>
+    //   filteredPartitionKeys.includes(r.PartitionName2) &&
+    //   r.LocaleMessageTime && r.LocaleMessageTime.startsWith(ds)
+    // );
 
-        // partition (city) filter
-        if (backendFilterKey) {
-          const ok = r.PartitionNameFriendly === backendFilterKey ||
-            apacForwardKey[r.PartitionNameFriendly] === backendFilterKey;
-          if (!ok) return false;
-        }
+    const all = data.details.filter(r =>
+      filteredPartitionKeys.includes(r.PartitionName2) &&
+      getIsoDate(r) === ds
+    );
 
-        // if no company selected, include everything
-        if (!selectedCompany) return true;
-
-        // compute country & city the same way companyRows does
-        const city = formatPartition(r.PartitionNameFriendly || '');
-        const disp = Object.values(apacPartitionDisplay).find(d => d.city === city);
-        const country = disp?.country || 'Unknown';
-
-        // canonical company name for this row
-        const canonical = getCanonicalCompany(r);
-
-        // build key and compare
-        const rowKey = makeCompanyKey(country, city, canonical);
-        return rowKey === selectedCompany;
-      })
-      .sort((a, b) => a.LocaleMessageTime.localeCompare(b.LocaleMessageTime));
-  }, [data, pickedDate, showDetails, backendFilterKey, selectedCompany]);
+    // b) sort oldest -> newest (so lastByKey keeps the last swipe of the day)
+    // all.sort((a, b) => new Date(a.LocaleMessageTime) - new Date(b.LocaleMessageTime));
 
 
+    all.sort((a, b) => (a.LocaleMessageTime || '').localeCompare(b.LocaleMessageTime || ''));
+
+    // c) last swipe per "person-like" key
+    // use PersonGUID when available, otherwise fallback to a stable composite key
+    const lastByKey = {};
+    all.forEach((r, idx) => {
+      const personKey = r.PersonGUID && String(r.PersonGUID).trim();
+      const fallbackKey = `${r.EmployeeID ?? ''}||${r.CardNumber ?? ''}||${String(r.ObjectName1 ?? '').trim()}`;
+      const key = personKey || fallbackKey || `row-${idx}`;
+      lastByKey[key] = r;
+    });
+
+    // d) take the last values (this matches your original working code)
+    let rows = Object.values(lastByKey);
+
+    // Attach computed company (so UI / exports / company filtering all use same canonical name)
+    rows = rows.map(r => ({ ...r, CompanyNameComputed: getCanonicalCompany ? getCanonicalCompany(r) : (r.CompanyName || '') }));
+
+    // If a company row was clicked, do the strict triple match (Country||City||Company) as before
+    if (selectedCompany) {
+      const [selCountry, selCity, selCompanyRaw] = selectedCompany.split('||');
+      const selCompanyNorm = String(selCompanyRaw || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+      rows = rows.filter(r => {
+        const rnCompany = String(r.CompanyNameComputed || 'Unknown').replace(/\s+/g, ' ').trim().toLowerCase();
+        const rowCity = partitionToDisplay[r.PartitionName2]?.city || r.PartitionName2 || '';
+        const rowCountry = partitionToDisplay[r.PartitionName2]?.country || 'Unknown';
+        return rnCompany === selCompanyNorm && rowCity === selCity && rowCountry === selCountry;
+      });
+    }
+    return rows;
+  }, [data, pickedDate, filteredPartitionKeys, selectedCompany]);
+
+  // Fetch once on mount
+  useEffect(() => {
+    setLoading(true);
+    fetchHistory()
+      .then(json => setData(json))
+      .finally(() => setLoading(false));
+  }, []);
 
 
-  // companyRows: aggregated by normalized CompanyName for pickedDate (respects backendFilterKey)
+  // Excel export (more attractive) — uses ExcelJS (already imported)
+  const handleExport = async () => {
+    if (!pickedDate || !detailRows || detailRows.length === 0) return;
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Details');
+
+    // Columns to export (order + keys)
+    const cols = [
+      { header: 'Sr', key: 'sr', width: 2 },
+      { header: 'Date', key: 'date', width: 5 },
+      { header: 'Time', key: 'time', width: 5 },
+      { header: 'EmployeeID', key: 'employee', width: 6 },
+      { header: 'CardNumber', key: 'card', width: 6 },
+      { header: 'Name', key: 'name', width: 32 },
+      { header: 'PersonnelType', key: 'type', width: 10 },
+      { header: 'CompanyName', key: 'company', width: 30 },
+      { header: 'PrimaryLocation', key: 'location', width: 32 },
+      { header: 'Door', key: 'door', width: 40 },
+      { header: 'Partition', key: 'partition', width: 10 },
+    ];
+
+    ws.columns = cols;
+
+    // Title row (merged)
+    const lastColLetter = String.fromCharCode('A'.charCodeAt(0) + cols.length - 1);
+    ws.mergeCells(`A1:${lastColLetter}1`);
+    const titleCell = ws.getCell('A1');
+    titleCell.value = `${format(pickedDate, 'EEEE, d MMMM, yyyy')} — Details`;
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF000000' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+
+    // Spacer row
+    ws.addRow([]);
+
+    // Header row
+    const headerRow = ws.addRow(cols.map(c => c.header));
+    headerRow.eachCell(cell => {
+      cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } }; // amber
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } },
+      };
+    });
+
+    // Data rows
+    detailRows.forEach((r, i) => {
+      const row = ws.addRow([
+        i + 1,
+          getIsoDate(r),
+        formatApiTime12(r.LocaleMessageTime),
+        r.EmployeeID ?? '',
+        r.CardNumber ?? '',
+        r.ObjectName1 ?? '',
+        r.PersonnelType ?? '',
+        (r.CompanyNameComputed || r.CompanyName) ?? '',
+        r.PrimaryLocation ?? '',
+        r.Door ?? '',
+        partitionToDisplay[r.PartitionName2]?.city || r.PartitionName2 || ''
+      ]);
+
+      // Row styling: borders + alignment
+      row.eachCell((cell, colNumber) => {
+        cell.alignment = { vertical: 'middle', horizontal: (colNumber >= 4 && colNumber <= 5) ? 'right' : 'left', wrapText: false };
+        cell.font = { name: 'Calibri', size: 11, color: { argb: 'FF000000' } };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+          right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        };
+      });
+
+      // Zebra stripe every other row
+      if (i % 2 === 1) {
+        row.eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F7F7' } };
+        });
+      }
+    });
+
+    // Totals row (count)
+    const totalCount = detailRows.length;
+    const totalRow = ws.addRow(['', '', '', '', '', '', '', '', '', 'Total', totalCount]);
+    totalRow.eachCell((cell, colNumber) => {
+      cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+      cell.alignment = { horizontal: colNumber === 11 ? 'right' : 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } },
+      };
+      if (colNumber === 11) {
+        cell.numFmt = '#,##0';
+      }
+    });
+
+
+
+
+    // Custom widths by column index
+    const fixedWidths = {
+      0: 4,   // Sr
+      1: 15,  // Date
+      2: 15,  // Time
+      3: 15,  // EmployeeID
+      4: 14,  // CardNumber
+      5: 25,  // Name
+      6: 14,  // PersonnelType
+      7: 30,  // CompanyName
+      8: 30,  // PrimaryLocation
+      9: 40,  // Door
+      10: 18, // Partition
+    };
+
+    // Apply widths
+    ws.columns.forEach((col, index) => {
+      let maxLen = col.header ? String(col.header).length : 1;
+
+      col.eachCell({ includeEmpty: true }, c => {
+        const v = c.value === null || c.value === undefined ? '' : String(c.value);
+        maxLen = Math.max(maxLen, v.trim().length);
+      });
+
+      if (fixedWidths[index] !== undefined) {
+        col.width = fixedWidths[index]; // force custom width
+      } else {
+        col.width = Math.min(Math.max(maxLen, 4), 30); // auto fallback
+      }
+    });
+
+    // Freeze header area (title + spacer + header visible)
+    ws.views = [{ state: 'frozen', ySplit: 3 }];
+
+    // Outer thin border polish for the used area
+    const lastRow = ws.rowCount;
+    const lastCol = ws.columns.length;
+    for (let r = 1; r <= lastRow; r++) {
+      for (let c = 1; c <= lastCol; c++) {
+        const cell = ws.getCell(r, c);
+        cell.border = {
+          top: cell.border?.top || { style: 'thin', color: { argb: 'FFEEEEEE' } },
+          left: cell.border?.left || { style: 'thin', color: { argb: 'FFEEEEEE' } },
+          bottom: cell.border?.bottom || { style: 'thin', color: { argb: 'FFEEEEEE' } },
+          right: cell.border?.right || { style: 'thin', color: { argb: 'FFEEEEEE' } },
+        };
+      }
+    }
+
+    // Save workbook
+    const buf = await wb.xlsx.writeBuffer();
+    saveAs(new Blob([buf]), `history_${format(pickedDate, 'yyyyMMdd')}.xlsx`);
+  };
+
+  // --- EMEA companyRows: aggregated by CompanyName for pickedDate (EMEA-friendly) ---
   const companyRows = useMemo(() => {
     if (!data || !pickedDate) return [];
 
     const ds = format(pickedDate, 'yyyy-MM-dd');
 
-    // filter details for the date + optional partition filter
+    // filter details for this date and only for partitions we care about
     const filtered = data.details.filter(r =>
       r.LocaleMessageTime && r.LocaleMessageTime.slice(0, 10) === ds &&
-      (
-        !backendFilterKey ||
-        r.PartitionNameFriendly === backendFilterKey ||
-        apacForwardKey[r.PartitionNameFriendly] === backendFilterKey
-      )
+      filteredPartitionKeys.includes(r.PartitionName2)
     );
 
-    // aggregate into map: key = country||city||normalizedCompany
     const map = new Map();
 
     filtered.forEach(r => {
-      const city = formatPartition(r.PartitionNameFriendly || '');
-      const disp = Object.values(apacPartitionDisplay).find(d => d.city === city);
-      const country = disp?.country || 'Unknown';
+      const city = partitionToDisplay[r.PartitionName2]?.city || (r.PartitionName2 || 'Unknown');
+      const country = partitionToDisplay[r.PartitionName2]?.country || 'Unknown';
 
-      // use the shared canonical helper so companyRows and detail filtering match exactly
+      // use getCanonicalCompany to handle blank CompanyName
       const company = getCanonicalCompany(r);
 
       const key = `${country}||${city}||${company}`;
       const existing = map.get(key);
       if (existing) {
-        existing.total += 1; // counting rows as "total" (same behaviour as before)
+        existing.total += 1;
       } else {
         map.set(key, { country, city, company, total: 1 });
       }
     });
 
-    // return sorted list (optional: by country, city, company)
+
+
+
     return Array.from(map.values()).sort((a, b) => {
       if (a.country !== b.country) return a.country.localeCompare(b.country);
       if (a.city !== b.city) return a.city.localeCompare(b.city);
       return a.company.localeCompare(b.company);
     });
-  }, [data, pickedDate, backendFilterKey]);
+  }, [data, pickedDate, filteredPartitionKeys]);
 
-
-
-  const handleExport = async () => {
-    if (!pickedDate || !detailRows.length) return;
-
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Details");
-
-    // --- Top date row (merged across all columns) ---
-
-    sheet.mergeCells(1, 1, 1, 11); // merge across 11 columns
-    const titleCell = sheet.getCell("A1");
-    titleCell.value = format(pickedDate, "EEEE, d MMMM, yyyy");
-    titleCell.alignment = { horizontal: "center", vertical: "middle" };
-    titleCell.font = { bold: true, size: 14 };
-
-    // --- Header row ---
-    const headers = [
-      "Sr",
-      "Date",
-      "Time",
-      "Employee ID",
-      "Card Number",
-      "Name",
-      "Personnel Type",
-      "Company",
-      "Primary Location",
-      "Door",
-      "Partition"
-    ];
-    const headerRow = sheet.addRow(headers);
-    headerRow.eachCell(cell => {
-      cell.font = { bold: true, color: { argb: "0a0a0a" } };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFFFC107" }
-      };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" }
-      };
-    });
-
-    // --- Data rows ---
-    detailRows.forEach((r, i) => {
-      const row = sheet.addRow([
-        i + 1,
-        r.LocaleMessageTime ? r.LocaleMessageTime.slice(0, 10) : "",
-        formatApiTime12(r.LocaleMessageTime),
-        r.EmployeeID,
-        r.CardNumber,
-        r.ObjectName1,
-        r.PersonnelType,
-        r.CompanyName,
-        r.PrimaryLocation,
-        r.Door,
-        formatPartition(r.PartitionNameFriendly)
-      ]);
-      row.eachCell(cell => {
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" }
-        };
-      });
-    });
-
-    // --- Set explicit/sensible widths and alignments ---
-    // ExcelJS column index is 1-based. We'll set fixed widths for small columns
-    // and auto-size the rest with minimal padding.
-    // Map: A=Sr, B=Date, C=Time, D=Employee ID, E=Card Number, F=Name, G=Personnel Type,
-    // H=Company, I=Primary Location, J=Door, K=Partition
-
-    // First set some defaults (will override specific ones after)
-    sheet.columns = [
-      { key: 'sr' },           // A
-      { key: 'date' },         // B
-      { key: 'time' },         // C
-      { key: 'empid' },        // D
-      { key: 'card' },         // E
-      { key: 'name' },         // F
-      { key: 'ptype' },        // G
-      { key: 'company' },      // H
-      { key: 'ploc' },         // I
-      { key: 'door' },         // J
-      { key: 'partition' }     // K
-    ];
-
-    // Explicit compact widths for narrow/ID columns (these are character widths)
-    const explicitWidths = {
-      1: 7,   // Sr
-      2: 12,  // Date (yyyy-mm-dd is 10 chars; give a little room)
-      3: 13,  // Time (hh:mm:ss AM)
-      4: 12,  // Employee ID (IDs are short)
-      5: 12,
-      6: 25,
-      8: 25,  // Card Number (short)
-      10: 50
-      // other columns will be auto-sized below
-    };
-
-    // auto-size remaining columns but with minimal padding
-    // compute max length per column from cells (including header)
-    const maxLens = new Array(sheet.columns.length).fill(0);
-    sheet.eachRow((row, rowNumber) => {
-      row.eachCell((cell, colNumber) => {
-        const text = cell.value === null || cell.value === undefined ? '' : String(cell.value);
-        // don't count long strings with weird spacing — trim for measurement
-        const len = text.trim().length;
-        if (len > maxLens[colNumber - 1]) maxLens[colNumber - 1] = len;
-      });
-    });
-
-    // apply widths: use explicit widths where given, otherwise use measured length + small padding
-    sheet.columns.forEach((col, idx) => {
-      const colIndex = idx + 1;
-      if (explicitWidths[colIndex]) {
-        col.width = explicitWidths[colIndex];
-      } else {
-        // small padding: +1 (instead of +2 previously) and min 8, max 40
-        const measured = maxLens[idx] || 8;
-        const width = Math.min(Math.max(measured + 1, 8), 40);
-        col.width = width;
-      }
-
-
-    });
-
-    // Optional: freeze the header row to keep it visible when scrolling in Excel
-    sheet.views = [{ state: 'frozen', ySplit: 1 }];
-
-    // --- Save file ---
-    const buf = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buf]), `apac_history_${format(pickedDate, "yyyyMMdd")}.xlsx`);
-  };
-
-
-
-
-
-
-
-
-  // UPDATED: prettier Excel export for summary (date centered, full borders, header styling, spacing, column widths)
-
-  const handleExportSummary = async () => {
-    if (!pickedDate) return;
-
-    // workbook / sheet
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Summary');
-
-    // columns (widths)
-    ws.columns = [
-      { header: 'Country', key: 'country', width: 20 },
-      { header: 'City', key: 'city', width: 25 },
-      { header: 'Employees', key: 'employees', width: 12 },
-      { header: 'Contractors', key: 'contractors', width: 12 },
-      { header: 'Total', key: 'total', width: 12 },
-    ];
-
-    // Row 1: merged date centered
-    ws.mergeCells('A1:E1');
-    const dateCell = ws.getCell('A1');
-    dateCell.value = format(pickedDate, 'EEEE, d MMMM, yyyy');
-    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    dateCell.font = { name: 'Calibri', size: 14, bold: true };
-
-    // Row 2: blank spacing
-    ws.addRow([]);
-
-    // Row 3: header row (we'll style it)
-    const headerRow = ws.addRow(['Country', 'City', 'Employees', 'Contractors', 'Total']);
-    headerRow.height = 20;
-
-    // style helpers
-    const thinBorder = { style: 'thin', color: { argb: 'FF000000' } };
-    const allThinBorder = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
-
-    // header style: yellow fill, bold, centered
-    headerRow.eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } }; // yellow
-      cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = allThinBorder;
-    });
-
-    // Row 4: blank spacing (visual)
-    ws.addRow([]);
-
-    // Data rows start at excelRowIndex = current row number + 1
-    partitionRows.forEach(r => {
-      const row = ws.addRow([r.country, r.city, r.employee, r.contractor, r.total]);
-      // style cells & numeric formatting
-      row.eachCell((cell, colNumber) => {
-        cell.border = allThinBorder;
-        if (colNumber >= 3) {
-          // numeric columns: right align, number format
-          cell.alignment = { horizontal: 'right', vertical: 'middle' };
-          if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
-            cell.numFmt = '#,##0';
-          }
-        } else {
-          cell.alignment = { horizontal: 'left', vertical: 'middle' };
-        }
-        cell.font = { name: 'Calibri', size: 11, color: { argb: 'FF000000' } };
-      });
-    });
-
-    // Final total row
-    const totalEmployees = partitionRows.reduce((s, r) => s + r.employee, 0);
-    const totalContractors = partitionRows.reduce((s, r) => s + r.contractor, 0);
-    const totalTotal = partitionRows.reduce((s, r) => s + r.total, 0);
-    const totalRow = ws.addRow(['Total', '', totalEmployees, totalContractors, totalTotal]);
-
-    // style total row: bold and light-gray fill
-    totalRow.eachCell((cell, colNumber) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; // light gray
-      cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
-      cell.border = allThinBorder;
-      if (colNumber >= 3) {
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        cell.numFmt = '#,##0';
-      } else {
-        cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
-      }
-    });
-
-    // Freeze panes so header is visible (freeze above data rows: after row 4)
-    ws.views = [{ state: 'frozen', ySplit: 4 }];
-
-    // Optional: set sheet outline or table-like styling can be added here
-
-    // export
-    const buf = await wb.xlsx.writeBuffer();
-    const safeDate = format(pickedDate, 'yyyyMMdd');
-    const filename = `apac_summary_${safeDate}.xlsx`;
-    saveAs(new Blob([buf]), filename);
-  };
-
-
-
+  // --- Excel export for company summary (EMEA) ---
   const handleExportCompanies = async () => {
     if (!pickedDate || !companyRows.length) return;
 
@@ -1147,52 +531,126 @@ export default function History() {
 
     // save
     const buf = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buf]), `apac_companies_${format(pickedDate, "yyyyMMdd")}.xlsx`);
+    saveAs(new Blob([buf]), `emea_companies_${format(pickedDate, "yyyyMMdd")}.xlsx`);
   };
 
+
+  const handleExportSummary = async () => {
+    if (!pickedDate) return;
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Summary');
+
+    // Row 1: merged date centered 
+    ws.mergeCells('A1:E1');
+    const dateCell = ws.getCell('A1');
+    dateCell.value = format(pickedDate, 'EEEE, d MMMM, yyyy');
+    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    dateCell.font = { name: 'Calibri', size: 14, bold: true };
+
+    // Row 3: header row
+    const headerRow = ws.addRow(['Country', 'City', 'Employees', 'Contractors', 'Total']);
+    headerRow.height = 20;
+
+    // style helpers
+    const thinBorder = { style: 'thin', color: { argb: 'FF000000' } };
+    const allThinBorder = { top: thinBorder, left: thinBorder, bottom: thinBorder, right: thinBorder };
+
+    // header style: yellow fill, bold, centered
+    headerRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } };
+      cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = allThinBorder;
+    });
+
+    // Data rows start after the spacer
+    partitionRows.forEach(r => {
+      const row = ws.addRow([r.country, r.city, r.employee, r.contractor, r.total]);
+      row.eachCell((cell, colNumber) => {
+        cell.border = allThinBorder;
+        if (colNumber >= 3) {
+          // numeric columns: right align, number format
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+          if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
+            cell.numFmt = '#,##0';
+          }
+        } else {
+          cell.alignment = { horizontal: 'left', vertical: 'middle' };
+        }
+        cell.font = { name: 'Calibri', size: 11, color: { argb: 'FF000000' } };
+      });
+    });
+
+    // Final total row
+    const totalEmployees = partitionRows.reduce((s, r) => s + r.employee, 0);
+    const totalContractors = partitionRows.reduce((s, r) => s + r.contractor, 0);
+    const totalTotal = partitionRows.reduce((s, r) => s + r.total, 0);
+    const totalRow = ws.addRow(['Total', '', totalEmployees, totalContractors, totalTotal]);
+
+    totalRow.eachCell((cell, colNumber) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; // light gray
+      cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
+      cell.border = allThinBorder;
+      if (colNumber >= 3) {
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        cell.numFmt = '#,##0';
+      } else {
+        cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
+      }
+    });
+
+    // Freeze panes so header is visible (freeze above data rows: after the header + spacer rows)
+    ws.views = [{ state: 'frozen', ySplit: 2 }];
+
+    // Autosize columns (reasonable limits)
+    ws.columns.forEach(col => {
+      let maxLen = 10;
+      col.eachCell({ includeEmpty: true }, c => {
+        const v = c.value === null || c.value === undefined ? '' : String(c.value);
+        maxLen = Math.max(maxLen, v.trim().length + 2);
+      });
+      col.width = Math.min(Math.max(maxLen, 8), 40);
+    });
+
+    // export
+    const buf = await wb.xlsx.writeBuffer();
+    const safeDate = format(pickedDate, 'yyyyMMdd');
+    const filename = `emea_summary_${safeDate}.xlsx`;
+    saveAs(new Blob([buf]), filename);
+  };
 
 
   if (loading) return <LoadingSpinner />;
   if (!data) return null;
 
-  const datePickerSx = {
-    backgroundColor: '#000',
-    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#FFC107' },
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#FFC107' },
-    '& .MuiInputBase-input': { color: '#FFC107' },
-    '& .MuiInputLabel-root': { color: '#FFC107' },
-    '& .MuiInputAdornment-root svg': { color: '#FFC107' },
-  };
 
   return (
     <>
       <Header />
       <Container maxWidth={false} disableGutters sx={{ pt: 2, pb: 4 }}>
-        {/* ‣ Date & summary */}
+
+        {/* DatePicker + Summary */}
         {pickedDate && summaryEntry ? (
 
-          <Box display="flex" alignItems="flex-start" sx={{ px: 2, mb: 2, gap: 2 }}>
+          <Box display="flex" alignItems="flex-start" sx={{ px: 2, mb: 2, gap: 1 }}>
             <Box sx={{ width: 200 }}>
               <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <DatePicker
                   label="Select date"
                   value={pickedDate}
                   onChange={d => { setPickedDate(d); setShowDetails(false); }}
-                  renderInput={params => <TextField fullWidth {...params} sx={datePickerSx} />}
+                  renderInput={params => <TextField fullWidth {...params} />}
                 />
               </LocalizationProvider>
             </Box>
 
             {/* Container for both tables side-by-side */}
-
             <Box sx={{ display: 'flex', gap: 2, width: '100%', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
               {/* Left: existing summary table */}
-
               <Box sx={{ flex: 1, minWidth: 320 }}>
-
-                <Paper elevation={3} sx={{ p: 3, border: '3px solid #000', borderRadius: 2 }}>
+                <Paper elevation={3} sx={{ p: 1, border: '3px solid #000', borderRadius: 2 }}>
                   <TableContainer sx={{ maxHeight: 500, overflowY: 'auto' }}>
-
                     <Table sx={{ border: '2px solid #000' }} size="small">
                       <TableHead>
                         <TableRow>
@@ -1239,36 +697,33 @@ export default function History() {
                       </TableBody>
                     </Table>
                   </TableContainer>
-                </Paper>
 
-                <Box display="flex" justifyContent="center" sx={{ mt: 1 }}>
-                  <Button variant="contained" sx={{ bgcolor: '#FFC107', color: '#000' }}
-                    onClick={() => setShowDetails(v => !v)}>
-                    {showDetails ? 'Hide Details' : 'See Details'}
-                  </Button>
-                  {showDetails && (
-                    <Button variant="outlined" sx={{ ml: 2, borderColor: '#FFC107', color: '#FFC107' }}
-                      onClick={handleExport}>
-                      Export to Excel
+                  <Box display="flex" justifyContent="center" sx={{ mt: 1 }}>
+                    <Button variant="contained" sx={{ bgcolor: '#FFC107', color: '#000' }}
+                      onClick={() => setShowDetails(v => !v)}>
+                      {showDetails ? 'Hide Details' : 'See Details'}
                     </Button>
-                  )}
-                  <Button
-                    variant="contained"
-                    sx={{ ml: 2, bgcolor: '#FFC107', color: '#000' }}
-                    onClick={handleExportSummary}
-                  >
-                    Export Summary to Excel
-                  </Button>
-                </Box>
+                    {showDetails && (
+                      <Button variant="outlined" sx={{ ml: 2, borderColor: '#FFC107', color: '#FFC107' }}
+                        onClick={handleExport}>
+                        Export Details
+                      </Button>
+                    )}
+                    <Button
+                      variant="contained"
+                      sx={{ ml: 2, bgcolor: '#FFC107', color: '#000' }}
+                      onClick={handleExportSummary}
+                    >
+                      Export Summary to Excel
+                    </Button>
+                  </Box>
+                </Paper>
               </Box>
 
-              {/* Right: NEW company-level table (same style) */}
-
+              {/* Right: company-level table (same style as APAC) */}
               <Box sx={{ flex: 1, minWidth: 320 }}>
-
-                <Paper elevation={3} sx={{ p: 3, border: '3px solid #000', borderRadius: 2 }}>
-                  <TableContainer sx={{ maxHeight: 280, overflowY: 'auto' }}>
-
+                <Paper elevation={3} sx={{ p: 1, border: '3px solid #000', borderRadius: 2 }}>
+                  <TableContainer sx={{ maxHeight: 380, overflowY: 'auto' }}>
                     <Table sx={{ border: '2px solid #000' }} size="small">
                       <TableHead>
                         <TableRow>
@@ -1287,19 +742,24 @@ export default function History() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-
                         {companyRows.length > 0 ? companyRows.map((r, i) => {
-                          const rowKey = makeCompanyKey(r.country, r.city, r.company);
+
+                          const rowKey = `${r.country}||${r.city}||${r.company}`;
                           return (
                             <TableRow
                               key={`${r.company}-${i}`}
                               onClick={() => {
-                                if (selectedCompany === rowKey) {
-                                  setSelectedCompany(null);   // second click — clear filter
-                                  setShowDetails(true);
-                                } else {
-                                  setSelectedCompany(rowKey); // first click — filter
-                                  setShowDetails(true);
+                                // keep existing behaviour: toggle selection if you have selection handler
+                                if (typeof setSelectedCompany === 'function') {
+
+                                  if (selectedCompany === rowKey) {
+                                    setSelectedCompany(null);
+                                    setShowDetails(true);
+                                  } else {
+                                    setSelectedCompany(rowKey);
+                                    setShowDetails(true);
+                                  }
+
                                 }
                               }}
                               sx={{
@@ -1309,18 +769,6 @@ export default function History() {
                               }}
                               tabIndex={0}
                               role="button"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  if (selectedCompany === rowKey) {
-                                    setSelectedCompany(null);
-                                    setShowDetails(true);
-                                  } else {
-                                    setSelectedCompany(rowKey);
-                                    setShowDetails(true);
-                                  }
-                                }
-                              }}
                             >
                               <TableCell sx={{ border: '2px solid #000' }}>{r.country}</TableCell>
                               <TableCell sx={{ border: '2px solid #000' }}>{r.city}</TableCell>
@@ -1330,21 +778,20 @@ export default function History() {
                               </TableCell>
                             </TableRow>
                           );
-                        }):(
-                            <TableRow>
-                              <TableCell colSpan={4} sx={{ border: '2px solid #000', textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
-                                No records for this date.
-                              </TableCell>
-                            </TableRow>
-                          )}
+                        }) : (
+                          <TableRow>
+                            <TableCell colSpan={4} sx={{ border: '2px solid #000', textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
+                              No records for this date.
+                            </TableCell>
+                          </TableRow>
+                        )}
 
-                        {/* Totals row */}
                         <TableRow sx={{ bgcolor: '#666' }}>
                           <TableCell colSpan={2} align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
                             Total
                           </TableCell>
                           <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', border: '2px solid #000' }}>
-                            {/* empty cell for layout: keep consistent with left table */}
+                            {/* empty cell for layout */}
                           </TableCell>
                           <TableCell align="right" sx={{ color: '#fff', fontWeight: 'bold', bgcolor: '#333', border: '2px solid #000' }}>
                             {companyRows.reduce((s, r) => s + r.total, 0)}
@@ -1353,22 +800,20 @@ export default function History() {
                       </TableBody>
                     </Table>
                   </TableContainer>
+
+                  <Box display="flex" justifyContent="center" sx={{ mt: 1 }}>
+                    <Button
+                      variant="contained"
+                      sx={{ bgcolor: '#FFC107', color: '#000' }}
+                      onClick={handleExportCompanies}
+                    >
+                      Export Companies to Excel
+                    </Button>
+                  </Box>
                 </Paper>
-
-
-                <Box display="flex" justifyContent="center" sx={{ mt: 1 }}>
-                  <Button
-                    variant="contained"
-                    sx={{ bgcolor: '#FFC107', color: '#000' }}
-                    onClick={handleExportCompanies}
-                  >
-                    Export Companies to Excel
-                  </Button>
-                </Box>
               </Box>
             </Box>
           </Box>
-
         ) : (
           <Box sx={{ px: 2, mb: 3 }}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -1376,7 +821,7 @@ export default function History() {
                 label="Select date"
                 value={pickedDate}
                 onChange={d => { setPickedDate(d); setShowDetails(false); }}
-                renderInput={params => <TextField fullWidth {...params} sx={datePickerSx} />}
+                renderInput={params => <TextField fullWidth {...params} />}
               />
             </LocalizationProvider>
             {!pickedDate && (
@@ -1386,34 +831,32 @@ export default function History() {
             )}
           </Box>
         )}
-
-        {/* ‣ Details */}
+        {/* Details table */}
         {showDetails && (
-          <Box display="flex" justifyContent="center" mb={0} sx={{ width: '100%' }}>
-            <Paper elevation={1} sx={{ p: 1, width: '100%', border: '3px solid #000', borderRadius: 2 }}>
+          <Box display="flex" justifyContent="center" mb={2} sx={{ width: '100%' }}>
+            <Paper elevation={1} sx={{ px: 4, py: 1, width: '100%', border: '3px solid #000', borderRadius: 2 }}>
               {detailRows.length > 0 ? (
-
                 <Table sx={{ border: '2px solid #000', borderCollapse: 'collapse' }} size='small'>
                   <TableHead>
                     <TableRow sx={{ bgcolor: '#000' }}>
-                      {[
-                        'Sr', 'Date', 'Time',
-                        'Employee ID', 'Card Number', 'Name', 'Personnel Type', 'CompanyName', 'PrimaryLocation',
-                        'Door', 'Partition'
-                      ].map(h => (
-                        <TableCell key={h} align="center"
-                          sx={{ color: '#FFC107', fontWeight: 'bold', fontSize: 14, border: '2px solid #000' }}>
-                          {h}
-                        </TableCell>
-                      ))}
+                      {['Sr', 'Date', 'Time', 'Emp ID', 'Card', 'Name', 'Type', 'CompanyName', 'PrimaryLocation', 'Door', 'Partition']
+                        .map(h => (
+                          <TableCell key={h} align="center"
+                            sx={{ color: '#FFC107', fontWeight: 'bold', fontSize: 14, border: '2px solid #000' }}>
+                            {h}
+                          </TableCell>
+                        ))}
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {detailRows.map((r, i) => (
-                      <TableRow key={`${r.PersonGUID}-${i}`}>
-                        <TableCell sx={{ border: '2px solid #000', whiteSpace: 'nowrap' }}>{i + 1}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000' }}>{r.LocaleMessageTime.slice(0, 10)}</TableCell>
-                        <TableCell sx={{ border: '2px solid #000', whiteSpace: 'nowrap' }}>
+                      <TableRow key={r.PersonGUID}>
+                        <TableCell sx={{ border: '2px solid #000' }}>{i + 1}</TableCell>
+
+                        <TableCell sx={{ border: '2px solid #000' }}>
+                          {getIsoDate(r)}
+                        </TableCell>
+                        <TableCell sx={{ border: '2px solid #000' }}>
                           {formatApiTime12(r.LocaleMessageTime)}
                         </TableCell>
                         <TableCell sx={{ border: '2px solid #000' }}>{r.EmployeeID}</TableCell>
@@ -1424,24 +867,430 @@ export default function History() {
                         <TableCell sx={{ border: '2px solid #000' }}>{r.PrimaryLocation}</TableCell>
                         <TableCell sx={{ border: '2px solid #000' }}>{r.Door}</TableCell>
                         <TableCell sx={{ border: '2px solid #000' }}>
-                          {formatPartition(r.PartitionNameFriendly)}
+                          {partitionToDisplay[r.PartitionName2]?.city || r.PartitionName2}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               ) : (
-                <Typography variant="body2" sx={{ color: '#666', textAlign: 'center', mt: 2, fontStyle: 'italic' }}>
+                <Typography variant="body2" sx={{
+                  color: '#666', textAlign: 'center', mt: 2, fontStyle: 'italic'
+                }}>
                   No swipe records found for this date.
                 </Typography>
               )}
             </Paper>
           </Box>
         )}
-
-
-
       </Container>
+      <Footer />
+    </>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useEffect, useState, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Container, Box, Typography, Button, TextField,
+  TableContainer, Paper, Table, TableHead, TableRow, TableCell, TableBody
+} from '@mui/material';
+
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+
+
+import Header from '../components/Header';
+import Footer from '../components/Footer';
+import LoadingSpinner from '../components/LoadingSpinner';
+import DataTable from '../components/DataTable';
+import { fetchLiveSummary } from '../api/occupancy.service';
+import { lookupFloor } from '../utils/floorLookup';
+
+export default function PartitionDetailDetails() {
+  const { partition } = useParams();
+  const navigate = useNavigate();
+
+  const [details, setDetails] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState('');
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState(null);
+
+  // Load & refresh
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const json = await fetchLiveSummary();
+      if (!active) return;
+      const det = json.details
+        .filter(r => r.PartitionName2 === partition && r.Direction === 'InDirection')
+        .map(r => ({
+          ...r,
+          floor: lookupFloor(r.PartitionName2, r.Door, r.Direction)
+        }));
+      setDetails(det);
+      setLastUpdate(new Date().toLocaleTimeString());
+      setLoading(false);
+    };
+    load();
+    const iv = setInterval(load, 1000);
+    return () => { active = false; clearInterval(iv); };
+  }, [partition]);
+
+  const floorMap = useMemo(() => {
+    return details.reduce((m, r) => {
+      m[r.floor] = m[r.floor] || [];
+      m[r.floor].push(r);
+      return m;
+    }, {});
+  }, [details]);
+
+
+  const formatApiTime12 = (iso) => {
+    if (!iso || typeof iso !== 'string') return '';
+    // Expect ISO like "2025-09-01T03:35:14.000Z"
+    const hh = iso.slice(11, 13);
+    const mm = iso.slice(14, 16);
+    const ss = iso.slice(17, 19);
+    if (!hh || !mm || !ss) return '';
+    let h = parseInt(hh, 10);
+    if (Number.isNaN(h)) return `${hh}:${mm}:${ss}`;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    let h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+    return `${String(h12).padStart(2, '0')}:${mm}:${ss} ${ampm}`;
+  };
+
+
+
+  const displayed = useMemo(() => {
+    const term = search.toLowerCase();
+    return Object.entries(floorMap)
+      .map(([floor, emps]) => {
+        const filteredEmps = emps.filter(e =>
+          floor.toLowerCase().includes(term) ||
+          e.ObjectName1?.toLowerCase().includes(term) ||
+          e.EmployeeID?.toString().toLowerCase().includes(term) ||
+          e.CardNumber?.toString().toLowerCase().includes(term)    // Card Number
+        );
+        return [floor, filteredEmps];
+      })
+      .filter(([, filteredEmps]) => filteredEmps.length > 0);
+  }, [floorMap, search]);
+
+
+
+  const exportToExcel = async (floor, data) => {
+    if (!data || data.length === 0) return;
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Entries');
+
+    // Title row (merged)
+    sheet.mergeCells('A1:H1');
+    const titleCell = sheet.getCell('A1');
+    titleCell.value = `${floor} — Entries`;
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF000000' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '8a8987' } };
+
+    // Header row (row 2)
+    const headers = ["Sr No", "ID", "Name", "Time", "Type", "CompanyName", "Card", "Door"];
+    const headerRow = sheet.addRow(headers);
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF000000' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF000000' } },
+        left: { style: 'thin', color: { argb: 'FF000000' } },
+        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+        right: { style: 'thin', color: { argb: 'FF000000' } }
+      };
+    });
+
+    // Data rows (start at row 3)
+    data.forEach((r, i) => {
+      const row = sheet.addRow([
+        i + 1,
+        r.EmployeeID ?? '',
+        r.ObjectName1 ?? '',
+        formatApiTime12(r.LocaleMessageTime),
+        r.PersonnelType ?? '',
+        r.CompanyName ?? '',
+        r.CardNumber ?? '',
+        r.Door ?? ''
+      ]);
+
+      // row styling: borders + alternate fill
+      row.eachCell((cell) => {
+        cell.alignment = { vertical: 'middle', wrapText: false };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+      });
+
+      if ((i + 1) % 2 === 0) {
+        row.eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F7F7' } };
+        });
+      }
+    });
+
+    // Column widths & small alignment tweaks
+    sheet.columns = [
+      { key: 'sr', width: 8 },        // Sr No
+      { key: 'id', width: 14 },       // ID
+      { key: 'name', width: 28 },     // Name
+      { key: 'time', width: 16 },     // Time
+      { key: 'type', width: 16 },     // Type
+      { key: 'company', width: 34 },  // CompanyName
+      { key: 'card', width: 18 },     // Card
+      { key: 'door', width: 50 }      // Door
+    ];
+
+    // Freeze header area (keep title + header visible)
+    sheet.views = [{ state: 'frozen', ySplit: 2 }];
+
+    // Add a thin outer border around the entire used range for polish
+    const lastRow = sheet.rowCount;
+    const lastCol = sheet.columns.length;
+    for (let r = 1; r <= lastRow; r++) {
+      for (let c = 1; c <= lastCol; c++) {
+        const cell = sheet.getCell(r, c);
+        // ensure border exists (merge with existing)
+        cell.border = {
+          top: cell.border?.top || { style: 'thin', color: { argb: 'FF000000' } },
+          left: cell.border?.left || { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: cell.border?.bottom || { style: 'thin', color: { argb: 'FF000000' } },
+          right: cell.border?.right || { style: 'thin', color: { argb: 'FF000000' } },
+        };
+      }
+    }
+
+    // File save
+    const buf = await workbook.xlsx.writeBuffer();
+    const safeFloor = String(floor).replace(/[^a-z0-9\-_]/gi, '_').slice(0, 80);
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    saveAs(new Blob([buf]), `${safeFloor}_entries_${ts}.xlsx`);
+  };
+
+
+
+
+
+
+
+
+  if (loading) {
+    return <>
+      <Header />
+      <Box p={4}><LoadingSpinner /></Box>
+      <Footer />
+    </>;
+  }
+
+  return (
+    <>
+      <Header />
+      <Container maxWidth={false} disableGutters sx={{ px: 2, py: 2 }}>
+
+        <Box mb={1}><Button size="small" onClick={() => navigate(-1)}>← Back to Overview</Button></Box>
+
+        <Box display="flex" alignItems="center" flexWrap="wrap" gap={0.5} mb={2}>
+          {/* Title */}
+          <Typography variant="h6">Floor Details</Typography>
+
+          {/* Last updated text */}
+          {/* <Typography variant="body2" color="textSecondary" sx={{ ml: 1 }}>
+            Last updated: {lastUpdate}
+          </Typography> */}
+
+          {/* Search field */}
+          <TextField
+            size="small"
+            placeholder="Search floor / emp…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            sx={{ ml: 1 }}
+          />
+        </Box>
+
+        <Box display="flex" flexWrap="wrap">
+          {[...displayed]
+            .sort((a, b) => b[1].length - a[1].length) // Priority: most rows first
+            .map(([floor, emps]) => {
+              const isExpanded = expanded === floor;
+              const visibleEmps = isExpanded ? emps : emps.slice(0, 10);
+
+              return (
+
+
+                <Box
+                  key={floor}
+                  sx={{
+                    width: { xs: '100%', sm: '50%' },
+                    p: 1,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  {/* Title + Export aligned in one row */}
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                      {floor} (Total {emps.length})
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => exportToExcel(floor, emps)}
+                    >
+                      Export
+                    </Button>
+                  </Box>
+
+                  {/* Smart height layout */}
+                  <Box
+                    sx={{
+                      border: '2px solid #FFC107',
+                      borderRadius: 1,
+                      p: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minHeight: 120,
+                      maxHeight: isExpanded ? 600 : 'auto',
+                    }}
+                  >
+                    <TableContainer
+                      component={Paper}
+                      variant="outlined"
+                      sx={{
+                        overflowY: 'auto',
+                        flexGrow: 1,
+                      }}
+                    >
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            {['ID', 'Name', 'Time', 'Type', 'CompanyName', 'Card', 'Door'].map((h, idx, arr) => (
+                              <TableCell
+                                key={h}
+                                sx={{
+                                  fontWeight: 'bold',
+                                  py: 0.5,
+                                  whiteSpace: 'nowrap',
+                                  borderRight: idx !== arr.length - 1 ? '1px solid #ccc' : 'none',
+                                  borderBottom: '1px solid #ccc',
+                                }}
+                              >
+                                {h}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        </TableHead>
+
+                        <TableBody>
+                          {visibleEmps.map((r, i) => (
+                            <TableRow key={i}>
+                              {[
+                                r.EmployeeID,
+                                r.ObjectName1,
+                                formatApiTime12(r.LocaleMessageTime),
+                                r.PersonnelType,
+                                r.CompanyName,
+                                r.CardNumber,
+                                r.Door,
+                              ].map((val, idx, arr) => (
+                                <TableCell
+                                  key={idx}
+                                  sx={{
+                                    py: 0.5,
+                                    minWidth: [50, 120, 100, 80, 100, 100][idx],
+                                    whiteSpace: 'nowrap',
+                                    borderRight: idx !== arr.length - 1 ? '1px solid #eee' : 'none',
+                                  }}
+                                >
+                                  {val}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+
+                    {emps.length > 10 && (
+                      <Box textAlign="right" mt={1}>
+                        <Button
+                          size="small"
+                          onClick={() => setExpanded(isExpanded ? null : floor)}
+                        >
+                          {isExpanded ? 'Hide' : 'See more…'}
+                        </Button>
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+              );
+            })}
+        </Box>
+
+        {
+          expanded && (
+            <Box mt={2}>
+              <Typography variant="h6" gutterBottom>{expanded} — All Entries</Typography>
+              <DataTable
+                columns={[
+                  { field: 'SrNo', headerName: 'Sr No' },               // <-- added
+                  { field: 'EmployeeID', headerName: 'ID' },
+                  { field: 'ObjectName1', headerName: 'Name' },
+                  { field: 'LocaleMessageTime', headerName: 'Time' },
+                  { field: 'PersonnelType', headerName: 'Type' },
+                  { field: 'CompanyName', headerName: 'CompanyName' },
+                  { field: 'CardNumber', headerName: 'Card' },
+                  { field: 'Door', headerName: 'Door' }
+                ]}
+                rows={floorMap[expanded].map((r, i) => ({
+                  ...r,
+                  LocaleMessageTime:      formatApiTime12(r.LocaleMessageTime),
+                  SrNo: i + 1                                      // <-- added
+                }))}
+              />
+            </Box>
+          )
+        }
+
+      </Container >
       <Footer />
     </>
   );

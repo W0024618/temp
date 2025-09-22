@@ -1,66 +1,67 @@
-C:\Users\W0024618\Desktop\swipeData\client\src\components\PersonnelDonutChart.css
+C:\Users\W0024618\Desktop\swipeData\client\src\components\SummaryCards.css
 
-
-
-
-
-.personnel-card {
-  width: 100%;
-  overflow: hidden; /* prevent spillover */
+:root {
+  --accent-0: #ffb84d;
+  --accent-1: #4db6ac;
+  --accent-2: #64b5f6;
+  --accent-3: #ba68c8;
+  --accent-4: #81c784;
+  --accent-5: #e57373;
 }
 
-.personnel-block {
-  flex: 1 1 170px;         /* allow shrinking, base size ~150px */
-  max-width: 200px;        /* prevent growing too large */
-  aspect-ratio: 1 / 1;     /* keep square shape */
-  border-radius: 1.2rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  color: white;
-  font-weight: 900;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-  margin-top: 36px;
-}
-
-.personnel-block:hover {
-  transform: translateY(-8px) scale(1.05);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
-}
-
-.personnel-icon {
-  font-size: 2rem;  /* slightly smaller for mobile */
-  margin-bottom: 0.5rem;
-  filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.4));
-}
-
-.personnel-type {
-  font-size: 0.9rem;
-  margin-bottom: 0.3rem;
+.summary-card-new {
+  background: rgba(15, 18, 28, 0.7);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
   text-align: center;
-  text-shadow: 0px 1px 3px rgba(0,0,0,0.6);
+  padding: 1rem;
+  color: #fff;
+}
+.summary-card-new:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6),
+              0 0 20px rgba(255, 215, 0, 0.3);
 }
 
-.personnel-count {
-  font-size: 1.3rem;
-  font-weight: bold;
-  text-shadow: 0px 2px 6px rgba(0,0,0,0.7);
+/* Circular progress */
+.progress-circle {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  position: relative;
+}
+.circle-inner {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-wrap {
+  font-size: 1.6rem;
+  color: #fff;
 }
 
-/* Mobile tweaks */
-@media (max-width: 876px) {
-  .personnel-block {
-    flex: 1 1 120px;
-    max-width: 140px;
-  }
-  .personnel-icon {
-    font-size: 1.5rem;
-  }
-  .personnel-count {
-    font-size: 1.1rem;
-  }
+/* Text */
+.title-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.75);
+  margin-bottom: 6px;
+}
+.count-text {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 6px 20px rgba(0,0,0,0.4);
 }
 
 
@@ -72,83 +73,112 @@ C:\Users\W0024618\Desktop\swipeData\client\src\components\PersonnelDonutChart.cs
 
 
 
+C:\Users\W0024618\Desktop\swipeData\client\src\components\SummaryCards.jsx
 
 
 
+// C:\Users\W0024618\Desktop\swipeData\client\src\components\SummaryCards.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { Card, Row, Col } from "react-bootstrap";
+import { FaUsers, FaUserTie, FaHardHat } from "react-icons/fa";
+import "./SummaryCards.css";
 
+export default function SummaryCards({
+  totalVisitedToday,
+  employeesVisitedToday,
+  contractorsVisitedToday,
+  totalOccupancy,
+  employeeCount,
+  contractorCount,
+}) {
+  const ICONS = [
+    { key: "totalVisitedToday", title: "Today's Total", value: totalVisitedToday, icon: <FaUsers /> },
+    { key: "employeesVisitedToday", title: "Today's Employees", value: employeesVisitedToday, icon: <FaUserTie /> },
+    { key: "contractorsVisitedToday", title: "Today's Contractors", value: contractorsVisitedToday, icon: <FaHardHat /> },
+    { key: "totalOccupancy", title: "Realtime Total", value: totalOccupancy, icon: <FaUsers /> },
+    { key: "employeeCount", title: "Realtime Employees", value: employeeCount, icon: <FaUserTie /> },
+    { key: "contractorCount", title: "Realtime Contractors", value: contractorCount, icon: <FaHardHat /> },
+  ];
 
+  // Convert to numbers safely
+  const sanitized = useMemo(
+    () => ICONS.map((c) => ({ ...c, value: Number(c.value) || 0 })),
+    [totalVisitedToday, employeesVisitedToday, contractorsVisitedToday, totalOccupancy, employeeCount, contractorCount]
+  );
+  const maxVal = Math.max(...sanitized.map((s) => s.value), 1);
 
+  // Animate numbers
+  const [animated, setAnimated] = useState(() =>
+    sanitized.reduce((acc, c) => {
+      acc[c.key] = 0;
+      return acc;
+    }, {})
+  );
 
-// C:\Users\W0024618\Desktop\swipeData\client\src\components\PersonnelDonutChart.jsx
-import React from "react";
-import { Card } from "react-bootstrap";
-import {
-  FaUserTie,
-  FaUserShield,
-  FaUserCog,
-  FaUserClock,
-  FaUserFriends,
-  FaUserTimes,
-} from "react-icons/fa";
-import "./PersonnelDonutChart.css"; // Custom 3D styles
+  useEffect(() => {
+    let rafId;
+    const duration = 1000;
+    const start = performance.now();
+    const from = sanitized.reduce((acc, c) => {
+      acc[c.key] = animated[c.key] || 0;
+      return acc;
+    }, {});
+    const to = sanitized.reduce((acc, c) => {
+      acc[c.key] = c.value;
+      return acc;
+    }, {});
 
-// Brand colors (vibrant, 3D friendly)
-const COLORS = {
-  Employee: "linear-gradient(135deg, #32CD32, #228B22)", // Blue
-  Visitor: "linear-gradient(135deg, #FF6F61, #CC3A30)", // Coral Red
-  Contractor: "linear-gradient(135deg, #1E90FF, #0066CC)", // Green
-  "Property Management": "linear-gradient(135deg, #FFD700, #E6AC00)", // Gold
-  "Temp Badge": "linear-gradient(135deg, #8A2BE2, #551A8B)", // Purple
-  "Terminated Personnel": "linear-gradient(135deg,rgb(233, 35, 190),rgb(179, 40, 229))", // Purple
-};
-// Icon mapping for each category
-const ICONS = {
-  Employee: <FaUserTie />,
-  Visitor: <FaUserFriends />,
-  Contractor: <FaUserCog />,
-  "Property Management": <FaUserShield />,
-  "Temp Badge": <FaUserClock />,
-  "Terminated Personnel": <FaUserTimes  />,
-};
-export default function PersonnelPeopleGrid({ data = [] }) {
-  const total = data.reduce((sum, e) => sum + e.count, 0);
+    function step(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const next = {};
+      for (const k of Object.keys(to)) {
+        next[k] = Math.round(from[k] + (to[k] - from[k]) * ease);
+      }
+      setAnimated(next);
+      if (t < 1) rafId = requestAnimationFrame(step);
+    }
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [sanitized]);
 
-  if (!data.length || total === 0) {
-    return (
-      <Card body className="bg-dark text-white p-4 text-center">
-        No personnel data available
-      </Card>
-    );
-  }
-  // ✅ Sort data by count descending
-  const sorted = [...data].sort((a, b) => b.count - a.count);
   return (
-    <Card className="mb-4 shadow-lg border personnel-card">
-      <Card.Header className="bg-dark text-warning text-center fw-bold"style={{
-          borderBottom: "2px solid var(--wu-yellow)",
-        }} >
-        <h5 className="mb-0">Personnel Type Headcount</h5>
-      </Card.Header>
-      <Card.Body
-        className="p-4 bg-dark d-flex flex-wrap justify-content-center"
-        style={{ gap: "1.5rem",}}>
-        {sorted.map((item) => (
-          <div
-            key={item.personnelType}
-            className="personnel-block"
-            style={{ background: COLORS[item.personnelType] }}
-          >
-            <div className="personnel-icon">{ICONS[item.personnelType]}</div>
-            <div className="personnel-type">{item.personnelType}</div>
-            <div className="personnel-count">{item.count}</div>
-          </div>
-        ))}
-      </Card.Body>
-    </Card>
+    <Row className="summary-cards-new">
+      {sanitized.map((c, i) => {
+        const percent = Math.round((c.value / maxVal) * 100);
+
+        return (
+          <Col key={c.key} xs={12} sm={6} md={4} lg={2} className="mb-4">
+            <Card className="summary-card-new">
+              <Card.Body className="d-flex flex-column align-items-center">
+                {/* Circular progress */}
+
+                {/* Circular progress (now always full) */}
+                <div
+                  className="progress-circle"
+                  style={{
+                    background: `var(--accent-${i})`
+                  }}
+                >
+                  <div className="circle-inner">
+                    <div className="icon-wrap" style={{ color: `var(--accent-${i})` }}>
+                      {c.icon}
+                    </div>
+                  </div>
+                  
+                </div>
+
+
+                {/* Title */}
+                <div className="title-text">{c.title}</div>
+
+                {/* Number */}
+                <div className="count-text">{animated[c.key].toLocaleString()}</div>
+              </Card.Body>
+            </Card>
+          </Col>
+        );
+      })}
+    </Row>
   );
 }
-
-
-
-
-

@@ -1,3 +1,32 @@
+
+// C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\routes\liveOccupancyRoutes.js
+const express = require('express');
+const router  = express.Router();
+const {
+  getLiveOccupancy,
+  
+  getMonthlySummary,
+ getPuneSnapshotAtDateTime
+} = require('../controllers/liveOccupancyController');
+
+router.get('/live-occupancy', getLiveOccupancy);
+// router.get('/occupancy-at', getSnapshotAt);  // GET /api/occupancy-at?at=...
+
+// New snapshot endpoint
+router.get('/occupancy-at-time-pune', getPuneSnapshotAtDateTime);
+
+router.get('/monthly-summary', getMonthlySummary);
+module.exports = router;
+
+
+
+
+
+
+
+
+
+
 C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\controllers\liveOccupancyController.js
 
 

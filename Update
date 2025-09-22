@@ -1,184 +1,218 @@
-C:\Users\W0024618\Desktop\swipeData\client\src\components\SummaryCards.css
 
-:root {
-  --accent-0: #ffb84d;
-  --accent-1: #4db6ac;
-  --accent-2: #64b5f6;
-  --accent-3: #ba68c8;
-  --accent-4: #81c784;
-  --accent-5: #e57373;
-}
+// C:\Users\W0024618\Desktop\swipeData\client\src\components\SummaryChart.jsx
+import React from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  LabelList,
+} from "recharts";
+import { Card } from "react-bootstrap";
+// Gradients/solid colors for known zones
 
-.summary-card-new {
-  background: rgba(15, 18, 28, 0.7);
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  text-align: center;
-  padding: 1rem;
-  color: #fff;
-}
-.summary-card-new:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6),
-              0 0 20px rgba(255, 215, 0, 0.3);
-}
+const ZONE_GRADIENTS = {
+  "Red Zone": ["#FF0000", "#D22B2B"],
+  "Red Zone - Outer Area": ["#FF0000", "#D22B2B"],
+  "Yellow Zone": ["#FFDE21", "#FFBF00"],
+  "Yellow Zone - Outer Area": ["#FFDE21", "#FFBF00"],
+  "Orange Zone": ["#E3963E", "#FFC966"],
+  "Orange Zone - Outer Area": ["#E3963E", "#FFC966"],
+  "Green Zone": ["#009E60", "#50C878"],
+  "Reception Area": ["#E0CCFF", "#F4E6FF"],
+  "Assembly Area": ["#FE6F5E", "#A366FF"],
+  "Tower B": ["#E68FAC", "#99BBFF"],
+  "2nd Floor, Pune": ["#FF6F61", "#FFA28F"],
+};
 
-/* Circular progress */
-.progress-circle {
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 12px;
-  position: relative;
-}
-.circle-inner {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.icon-wrap {
-  font-size: 1.6rem;
-  color: #fff;
-}
-
-/* Text */
-.title-text {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: rgba(255,255,255,0.75);
-  margin-bottom: 6px;
-}
-.count-text {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #fff;
-  text-shadow: 0 6px 20px rgba(0,0,0,0.4);
-}
+const SOLID_COLORS = [
+  "#FFD100",
+  "#009E60",
+  "#FF6F61",
+  "#58595B",
+  "#FFB800",
+  "#C75D00",
+];
 
 
 
 
+export default function SummaryChart({ summary = [] }) {
+  if (!summary.length) {
+    return <Card body>No zone data available</Card>;
+  }
+
+  // 🔹 Sort zones by headcount (descending)
+  const sortedData = [...summary].sort((a, b) => b.count - a.count);
+  // Custom tooltip
+
+  // const renderTooltip = ({ active, payload }) => {
+  //   if (!active || !payload || !payload.length) return null;
+  //   const { zone, count } = payload[0].payload;
+  //   return (
+  //     <div
+  //       style={{
+  //         backgroundColor: "#000",
+  //         border: "1px solid var(--wu-yellow)",
+  //         borderRadius: 4,
+  //         padding: "8px",
+  //         color: "#FFD100",
+  //         fontSize: "0.9rem",
+  //       }}
+  //     >
+  //       <div>
+  //         <strong>{zone}</strong>
+  //       </div>
+  //       <div>Headcount: {count}</div>
+  //     </div>
+  //   );
+  // };
 
 
-
-
-
-
-C:\Users\W0024618\Desktop\swipeData\client\src\components\SummaryCards.jsx
-
-
-
-// C:\Users\W0024618\Desktop\swipeData\client\src\components\SummaryCards.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { Card, Row, Col } from "react-bootstrap";
-import { FaUsers, FaUserTie, FaHardHat } from "react-icons/fa";
-import "./SummaryCards.css";
-
-export default function SummaryCards({
-  totalVisitedToday,
-  employeesVisitedToday,
-  contractorsVisitedToday,
-  totalOccupancy,
-  employeeCount,
-  contractorCount,
-}) {
-  const ICONS = [
-    { key: "totalVisitedToday", title: "Today's Total", value: totalVisitedToday, icon: <FaUsers /> },
-    { key: "employeesVisitedToday", title: "Today's Employees", value: employeesVisitedToday, icon: <FaUserTie /> },
-    { key: "contractorsVisitedToday", title: "Today's Contractors", value: contractorsVisitedToday, icon: <FaHardHat /> },
-    { key: "totalOccupancy", title: "Realtime Total", value: totalOccupancy, icon: <FaUsers /> },
-    { key: "employeeCount", title: "Realtime Employees", value: employeeCount, icon: <FaUserTie /> },
-    { key: "contractorCount", title: "Realtime Contractors", value: contractorCount, icon: <FaHardHat /> },
-  ];
-
-  // Convert to numbers safely
-  const sanitized = useMemo(
-    () => ICONS.map((c) => ({ ...c, value: Number(c.value) || 0 })),
-    [totalVisitedToday, employeesVisitedToday, contractorsVisitedToday, totalOccupancy, employeeCount, contractorCount]
+  
+const renderTooltip = ({ active, payload }) => {
+  if (!active || !payload || !payload.length) return null;
+  const { zone, count } = payload[0].payload;
+  return (
+    <div
+      style={{
+        backgroundColor: "#000",
+        border: "1px solid var(--wu-yellow)",
+        borderRadius: 4,
+        padding: "8px",
+        color: "#FFD100",
+        fontSize: "0.9rem",
+      }}
+    >
+      <div>
+        <strong>{zone}</strong> {/* ✅ already mapped */}
+      </div>
+      <div>Headcount: {count}</div>
+    </div>
   );
-  const maxVal = Math.max(...sanitized.map((s) => s.value), 1);
+};
 
-  // Animate numbers
-  const [animated, setAnimated] = useState(() =>
-    sanitized.reduce((acc, c) => {
-      acc[c.key] = 0;
-      return acc;
-    }, {})
-  );
 
-  useEffect(() => {
-    let rafId;
-    const duration = 1000;
-    const start = performance.now();
-    const from = sanitized.reduce((acc, c) => {
-      acc[c.key] = animated[c.key] || 0;
-      return acc;
-    }, {});
-    const to = sanitized.reduce((acc, c) => {
-      acc[c.key] = c.value;
-      return acc;
-    }, {});
 
-    function step(now) {
-      const t = Math.min(1, (now - start) / duration);
-      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-      const next = {};
-      for (const k of Object.keys(to)) {
-        next[k] = Math.round(from[k] + (to[k] - from[k]) * ease);
-      }
-      setAnimated(next);
-      if (t < 1) rafId = requestAnimationFrame(step);
-    }
-    rafId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(rafId);
-  }, [sanitized]);
+
+// 🔹 Helper: map special zone names to display-friendly ones
+const mapZoneName = (name) => {
+  if (name === "Red Zone - Outer Area") return "East Outdoor Area";
+  if (name === "Orange Zone - Outer Area") return "West Outdoor Area";
+  return name;
+};
+
+// 🔹 Shorten long zone names (after mapping)
+const shortenName = (name) => {
+  const mapped = mapZoneName(name);
+  if (mapped.length > 18) {
+    return mapped.split(" ").slice(0, 2).join(" ") + "..."; // take first 2 words
+  }
+  return mapped;
+};
+
+
+
+
+
+  
 
   return (
-    <Row className="summary-cards-new">
-      {sanitized.map((c, i) => {
-        const percent = Math.round((c.value / maxVal) * 100);
+    <Card
+      className="mb-4 shadow-sm border"
+      style={{ borderColor: "var(--wu-yellow)" }}
+    >
+      <Card.Header
+        className="bg-dark text-warning text-center fw-bold"
+        style={{
+          fontSize: "1.2rem",
+          borderBottom: "2px solid var(--wu-yellow)",
+        }}
+      >
+        Western Union - Pune Zone-wise Headcount
+      </Card.Header>
 
-        return (
-          <Col key={c.key} xs={12} sm={6} md={4} lg={2} className="mb-4">
-            <Card className="summary-card-new">
-              <Card.Body className="d-flex flex-column align-items-center">
-                {/* Circular progress */}
+      <Card.Body style={{ height: "50vh", backgroundColor: "#1a1a1a" }}>
+        <ResponsiveContainer width="100%" height="100%">
 
-                {/* Circular progress (now always full) */}
-                <div
-                  className="progress-circle"
-                  style={{
-                    background: `var(--accent-${i})`
-                  }}
-                >
-                  <div className="circle-inner">
-                    <div className="icon-wrap" style={{ color: `var(--accent-${i})` }}>
-                      {c.icon}
-                    </div>
-                  </div>
-                  
-                </div>
+          {/* <BarChart
+            layout="vertical"
+            data={sortedData.map((z) => ({
+              ...z,
+              shortZone: shortenName(z.zone),
+            }))}
+            margin={{ top: 20, right: 40, left: 60, bottom: 20 }}
+          > */}
 
 
-                {/* Title */}
-                <div className="title-text">{c.title}</div>
+          <BarChart
+  layout="vertical"
+  data={sortedData.map((z) => ({
+    ...z,
+    zone: mapZoneName(z.zone), // ✅ use mapped name
+    shortZone: shortenName(z.zone),
+  }))}
+  margin={{ top: 20, right: 40, left: 60, bottom: 20 }}
+>
 
-                {/* Number */}
-                <div className="count-text">{animated[c.key].toLocaleString()}</div>
-              </Card.Body>
-            </Card>
-          </Col>
-        );
-      })}
-    </Row>
+
+
+
+
+            <XAxis type="number" tick={{ fill: "#FFD100" }} />
+            <YAxis
+              dataKey="shortZone"
+              type="category"
+              tick={{ fill: "#FFD100", fontWeight: "bold" }}
+              width={150}
+            />
+            <Tooltip content={renderTooltip} />
+
+            <Bar dataKey="count" radius={[8, 8, 8, 8]} minPointSize={24}>
+              {sortedData.map((entry, idx) => {
+                const grad = ZONE_GRADIENTS[entry.zone];
+                const color = grad
+                  ? `url(#grad-${entry.zone.replace(/\s+/g, "-")})`
+                  : SOLID_COLORS[idx % SOLID_COLORS.length];
+                return <Cell key={`cell-${idx}`} fill={color} />;
+              })}
+
+              <LabelList
+                dataKey="count"
+                position="inside"
+                style={{
+                  fill: "#fff",
+                  fontWeight: "bold",
+                  fontSize: "0.9rem",
+                }}
+              />
+            </Bar>
+
+            <defs>
+              {sortedData.map((entry) => {
+                const grad = ZONE_GRADIENTS[entry.zone];
+                if (!grad) return null;
+                return (
+                  <linearGradient
+                    id={`grad-${entry.zone.replace(/\s+/g, "-")}`}
+                    key={entry.zone}
+                    x1="0"
+                    y1="0"
+                    x2="1"
+                    y2="0"
+                  >
+                    <stop offset="0%" stopColor={grad[0]} />
+                    <stop offset="100%" stopColor={grad[1]} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
+          </BarChart>
+        </ResponsiveContainer>
+      </Card.Body>
+    </Card>
   );
 }

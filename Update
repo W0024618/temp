@@ -1,131 +1,66 @@
-C:\Users\W0024618\Desktop\swipeData\client\src\components\FloorOccupancyChart.css
+C:\Users\W0024618\Desktop\swipeData\client\src\components\PersonnelDonutChart.css
 
 
 
-/* FloorOccupancyChart.css */
-.fo-card {
-    border-radius: 12px;
-    overflow: hidden;
-    background: linear-gradient(180deg, #0b0f14 0%, #0f1419 100%);
-    border: 1px solid rgba(255, 209, 0, 0.04);
-    color: #fff;
-    min-height: 420px;
-    box-shadow: 0 12px 40px rgba(2, 6, 23, 0.6);
+
+
+.personnel-card {
+  width: 100%;
+  overflow: hidden; /* prevent spillover */
 }
 
-.fo-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 18px;
-    background: linear-gradient(90deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.12));
-    border-bottom: 1px solid rgba(255, 209, 0, 0.06);
+.personnel-block {
+  flex: 1 1 170px;         /* allow shrinking, base size ~150px */
+  max-width: 200px;        /* prevent growing too large */
+  aspect-ratio: 1 / 1;     /* keep square shape */
+  border-radius: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-weight: 900;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  margin-top: 36px;
 }
 
-.fo-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 700;
-    color: #FFD100;
-    font-size: 1.05rem;
+.personnel-block:hover {
+  transform: translateY(-8px) scale(1.05);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
 }
 
-.fo-kpis {
-    display: flex;
-    gap: 14px;
-    align-items: center;
+.personnel-icon {
+  font-size: 2rem;  /* slightly smaller for mobile */
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.4));
 }
 
-.kpi {
-    background: rgba(255, 255, 255, 0.03);
-    /* padding: 8px 12px; */
-    border-radius: 10px;
-    text-align: right;
-    min-width: 130px;
-    box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.45);
+.personnel-type {
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+  text-align: center;
+  text-shadow: 0px 1px 3px rgba(0,0,0,0.6);
 }
 
-.kpi-label {
-    font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.7);
+.personnel-count {
+  font-size: 1.3rem;
+  font-weight: bold;
+  text-shadow: 0px 2px 6px rgba(0,0,0,0.7);
 }
 
-.kpi-value {
-    font-size: 1.15rem;
-    font-weight: 800;
-    color: #fff;
-    /* margin-top: 4px; */
-}
-
-.kpi-sub {
-    font-size: 0.72rem;
-    color: rgba(255, 255, 255, 0.45);
-    /* margin-top: 2px; */
-}
-
-/* Chart body */
-.fo-body {
-    height: 43vh;
-    /* allow breathing room; adjust as needed */
-    padding: 12px 8px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.01), rgba(0, 0, 0, 0.04));
-}
-
-/* Tooltip style */
-.fo-tooltip {
-    background: linear-gradient(180deg, #0f1720, #0b0f14);
-    border: 1px solid rgba(255, 209, 0, 0.16);
-    color: #fff;
-    padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
-}
-
-.fo-tooltip-title {
-    font-weight: 800;
-    color: #FFD100;
-    margin-bottom: 4px;
-}
-
-.fo-tooltip-main {
-    font-weight: 700;
-    margin-bottom: 6px;
-    color: #fff;
-}
-
-.fo-tooltip-pct {
-    color: #9AE6B4;
-    font-weight: 700;
-}
-
-.fo-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 6px;
-    color: #E6E6E6;
-}
-
-.fo-key {
-    opacity: 0.85;
-}
-
-.fo-val {
-    font-weight: 700;
-}
-
-/* small responsive tweaks */
-@media (max-width: 900px) {
-    .fo-body {
-        height: 52vh;
-    }
-
-    .fo-kpis {
-        display: none;
-    }
-
-    /* hide KPIs on small screens for space */
+/* Mobile tweaks */
+@media (max-width: 876px) {
+  .personnel-block {
+    flex: 1 1 120px;
+    max-width: 140px;
+  }
+  .personnel-icon {
+    font-size: 1.5rem;
+  }
+  .personnel-count {
+    font-size: 1.1rem;
+  }
 }
 
 
@@ -144,356 +79,74 @@ C:\Users\W0024618\Desktop\swipeData\client\src\components\FloorOccupancyChart.cs
 
 
 
-
-
-
-
-
-// src/components/FloorOccupancyChart.jsx
-import React from 'react';
+// C:\Users\W0024618\Desktop\swipeData\client\src\components\PersonnelDonutChart.jsx
+import React from "react";
+import { Card } from "react-bootstrap";
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Cell,
-  LabelList,
-  Legend,
-  Customized
-} from 'recharts';
-import { Card } from 'react-bootstrap';
-import {
-  FaSearch,
-  FaStar,
-  FaEnvelope,
-  FaChartBar,
-  FaUsers
-} from 'react-icons/fa';
-import floorCapacities from '../constants/floorCapacities';
+  FaUserTie,
+  FaUserShield,
+  FaUserCog,
+  FaUserClock,
+  FaUserFriends,
+  FaUserTimes,
+} from "react-icons/fa";
+import "./PersonnelDonutChart.css"; // Custom 3D styles
 
-/*
-  COLOR PALETTE: distinct gradient pairs for each cylinder (repeats if more floors)
-*/
-const CYLINDER_COLORS = [
-  ['#BEE9FF', '#4DB8FF'], // light -> mid blue
-  ['#0B4F8C', '#2F80ED'], // dark -> lighter blue
-  ['#F27FA6', '#B93F72'], // pink shades
-  ['#FFB84D', '#F26B00'], // orange shades
-  ['#C6F28B', '#4DB646']  // green shades
-];
+// Brand colors (vibrant, 3D friendly)
+const COLORS = {
+  Employee: "linear-gradient(135deg, #32CD32, #228B22)", // Blue
+  Visitor: "linear-gradient(135deg, #FF6F61, #CC3A30)", // Coral Red
+  Contractor: "linear-gradient(135deg, #1E90FF, #0066CC)", // Green
+  "Property Management": "linear-gradient(135deg, #FFD700, #E6AC00)", // Gold
+  "Temp Badge": "linear-gradient(135deg, #8A2BE2, #551A8B)", // Purple
+  "Terminated Personnel": "linear-gradient(135deg,rgb(233, 35, 190),rgb(179, 40, 229))", // Purple
+};
+// Icon mapping for each category
+const ICONS = {
+  Employee: <FaUserTie />,
+  Visitor: <FaUserFriends />,
+  Contractor: <FaUserCog />,
+  "Property Management": <FaUserShield />,
+  "Temp Badge": <FaUserClock />,
+  "Terminated Personnel": <FaUserTimes  />,
+};
+export default function PersonnelPeopleGrid({ data = [] }) {
+  const total = data.reduce((sum, e) => sum + e.count, 0);
 
-/*
-  ICONS: map icons per cylinder (repeats if more floors)
-*/
-const CYLINDER_ICONS = [FaUsers, FaStar, FaEnvelope, FaChartBar, FaSearch];
-
-export default function FloorOccupancyChart({ data = [] }) {
-  if (!data.length) {
+  if (!data.length || total === 0) {
     return (
-      <Card body className="bg-dark text-white">
-        No floor data available
+      <Card body className="bg-dark text-white p-4 text-center">
+        No personnel data available
       </Card>
     );
   }
-
-  // -------------------------------
-  // YOUR LOGIC: enrichment, totals,
-  // sorting — left exactly as you had it
-  // -------------------------------
-  const enriched = data.map((floorObj) => {
-    const { floor, total: liveCount } = floorObj;
-    const capacity = floorCapacities[floor] ?? 0;
-    const usedPct = capacity > 0
-      ? ((liveCount / capacity) * 100).toFixed(1)
-      : '0.0';
-    return {
-      ...floorObj,           // includes breakdown fields: employees, contractors, etc.
-      capacity,
-      liveCount,
-      usedPct: Number(usedPct),
-      label: `${liveCount}/${capacity}`
-    };
-  });
-
-  // 2) Compute “Pune Office Total” across all floors
-  const totalLive = enriched.reduce((sum, f) => sum + f.liveCount, 0);
-  const totalCap = enriched.reduce((sum, f) => sum + f.capacity, 0);
-  const totalUsedPct = totalCap > 0
-    ? ((totalLive / totalCap) * 100).toFixed(1)
-    : '0.0';
-
-  const totalEntry = {
-    floor: 'Pune Office Total',
-    liveCount: totalLive,
-    capacity: totalCap,
-    usedPct: Number(totalUsedPct),
-    label: `${totalLive}/${totalCap}`
-  };
-
-  // 3) Sort floors by liveCount descending, then prepend “Pune Office Total”
-  const sortedFloors = [...enriched].sort((a, b) => b.liveCount - a.liveCount);
-  const chartData = [totalEntry, ...sortedFloors];
-
-  // 4) Determine the maximum capacity to set Y-axis domain
-  const maxCapacity = Math.max(...chartData.map(f => f.capacity)) || 0;
-  // NEW: determine maximum live count (used to scale the Y axis so bars appear taller)
-  const maxLive = Math.max(...chartData.map(f => f.liveCount)) || 0;
-  // compute a display max slightly above maxLive for breathing room and round to nearest 10
-  const yDomainMax = Math.ceil((maxLive * 1.15 || maxCapacity) / 10) * 10;
-
-  // 5) Custom tooltip to show raw counts, percentages, and breakdown (left intact)
-  const renderTooltip = ({ active, payload }) => {
-    if (!active || !payload?.length) return null;
-    const floorObj = payload[0].payload;
-    const { liveCount, capacity, usedPct } = floorObj;
-
-    const breakdownEntries = Object.entries(floorObj).filter(
-      ([key]) =>
-        !['floor', 'liveCount', 'capacity', 'usedPct', 'label'].includes(key)
-    );
-
-    return (
-      <div
-        style={{
-          backgroundColor: '#1a1a1a',
-          color: '#FFD100',
-          border: '1px solid var(--wu-yellow)',
-          borderRadius: 4,
-          padding: '0.75rem',
-          minWidth: 200
-        }}
-      >
-        <div style={{ marginBottom: 4, fontSize: '1rem' }}>
-          <strong>Floor: {floorObj.floor}</strong>
-        </div>
-        <div style={{ marginBottom: 6, fontWeight: 'bold', fontSize: '0.9rem' }}>
-          Live: {liveCount} / {capacity} ({usedPct}%)
-        </div>
-        {breakdownEntries.map(([type, value]) => (
+  // ✅ Sort data by count descending
+  const sorted = [...data].sort((a, b) => b.count - a.count);
+  return (
+    <Card className="mb-4 shadow-lg border personnel-card">
+      <Card.Header className="bg-dark text-warning text-center fw-bold"style={{
+          borderBottom: "2px solid var(--wu-yellow)",
+        }} >
+        <h5 className="mb-0">Personnel Type Headcount</h5>
+      </Card.Header>
+      <Card.Body
+        className="p-4 bg-dark d-flex flex-wrap justify-content-center"
+        style={{ gap: "1.5rem",}}>
+        {sorted.map((item) => (
           <div
-            key={type}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginTop: 2,
-              color: '#fff',
-              fontSize: '0.85rem'
-            }}
+            key={item.personnelType}
+            className="personnel-block"
+            style={{ background: COLORS[item.personnelType] }}
           >
-            <span style={{ opacity: 0.8 }}>
-              {type.charAt(0).toUpperCase() + type.slice(1)}
-            </span>
-            <span style={{ fontWeight: 'bold' }}>{value}</span>
+            <div className="personnel-icon">{ICONS[item.personnelType]}</div>
+            <div className="personnel-type">{item.personnelType}</div>
+            <div className="personnel-count">{item.count}</div>
           </div>
         ))}
-      </div>
-    );
-  };
-
-  // -------------------------------
-  // Cylinder shape (single cylinder per floor)
-  // Recharts calls this with props: x, y, width, height, payload, etc.
-  // We derive the index by matching payload.floor in chartData.
-  // -------------------------------
-// REPLACE CylinderShape with this
-const CylinderShape = (props) => {
-  const { x, y, width, height, payload } = props;
-  const floorName = payload && payload.floor;
-  const idx = chartData.findIndex(d => d.floor === floorName);
-  const fill = `url(#cyl-grad-${idx})`;
-
-  const cx = x + width / 2;
-  const topRy = Math.max(8, width * 0.12);
-  const bottomRy = Math.max(10, width * 0.14);
-  const bottomY = y + height;
-
-  // centered label (live/cap) — large and bold
-  const centerLabel = payload && payload.label ? payload.label : '';
-
-  return (
-    <g>
-      {/* shadow under the cylinder */}
-      <ellipse
-        cx={cx}
-        cy={bottomY + bottomRy * 0.9}
-        rx={width * 0.62}
-        ry={bottomRy * 0.45}
-        fill="rgba(0,0,0,0.25)"
-      />
-
-      {/* cylinder body */}
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        rx={12}
-        ry={12}
-        fill={fill}
-        stroke="rgba(255,255,255,0.06)"
-        strokeWidth={1}
-      />
-
-      {/* top ellipse */}
-      {/* <ellipse
-        cx={cx}
-        cy={y}
-        rx={width / 2}
-        ry={topRy}
-        fill={fill}
-        stroke="rgba(255,255,255,0.12)"
-        strokeWidth={1}
-      /> */}
-
-      {/* bottom ellipse for 3D look */}
-      <ellipse
-        cx={cx}
-        cy={bottomY}
-        rx={width / 2}
-        ry={bottomRy}
-        fill="rgba(255,255,255,0.03)"
-      />
-
-      {/* big centered count (live/cap) */}
-      {centerLabel && (
-        <text
-          x={cx}
-          // vertically center: use middle of cylinder body
-          y={y + height / 2 + 8} 
-          textAnchor="middle"
-          fontSize={Math.max(12, Math.round(width * 0.18))}
-          fontWeight="600"
-          fill="#ffffff"
-        >
-          {centerLabel}
-        </text>
-      )}
-    </g>
-  );
-};
-  // -------------------------------
-  // Curve overlay that passes exactly through the top centers of the bars
-  // Customized component receives xAxisMap and yAxisMap we can use for exact pixel coords
-  // -------------------------------
- // REPLACE your existing CurveOverlay/InfographicCurve with this simplified version
-const CurveOverlay = ({ width, height, xAxisMap, yAxisMap }) => {
-  const xKey = Object.keys(xAxisMap || {})[0];
-  const yKey = Object.keys(yAxisMap || {})[0];
-
-  if (!xKey || !yKey) return null;
-
-  const xScale = xAxisMap[xKey].scale;
-  const yScale = yAxisMap[yKey].scale;
-
-  const points = chartData.map((d) => {
-    const x = xScale(d.floor) + (xScale.bandwidth ? xScale.bandwidth() / 2 : 0);
-    const y = yScale(d.liveCount);
-    return { x, y };
-  });
-
-  if (points.length < 2) return null;
-
-  // build smooth path
-  let path = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const cur = points[i];
-    const midX = (prev.x + cur.x) / 2;
-    const midY = (prev.y + cur.y) / 2;
-    path += ` Q ${prev.x} ${prev.y} ${midX} ${midY}`;
-  }
-  const last = points[points.length - 1];
-  path += ` T ${last.x} ${last.y}`;
-
-  return (
-    <g>
-      {/* faint grey helper line */}
-      <path d={path} fill="none" stroke="#cccccc" strokeWidth={2} strokeOpacity={0.6} />
-      {/* bright accent line on top */}
-      <path d={path} fill="none" stroke="#FFD100" strokeWidth={3} strokeOpacity={0.9} strokeLinecap="round" />
-    </g>
-  );
-};
-  return (
-    <Card className="mb- shadow-sm border" style={{ borderColor: 'var(--wu-yellow)' }}>
-      <Card.Header className="bg-dark text-warning text-center fw-bold" style={{ borderBottom: '2px solid var(--wu-yellow)', fontSize: '1.2rem' }}>
-        Western Union-Pune Headcount against Occupancy
-      </Card.Header>
-
-      {/* NEW: increase chart container height so cylinders can be taller */}
-      <Card.Body style={{ height: '50vh', padding: 0, backgroundColor: 'var(--wu-gray-dark)' }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={chartData}
-            // NEW: more top margin so the curve + markers have space
-            margin={{ top: 10, right: 24, left: 20, bottom: 40 }}
-            // keep category gap but you can tweak to control cylinder spacing
-            barCategoryGap="18%"
-          >
-            {/* define per-cylinder gradients */}
-            <defs>
-              {chartData.map((_, idx) => {
-                const [c1, c2] = CYLINDER_COLORS[idx % CYLINDER_COLORS.length];
-                return (
-                  <linearGradient id={`cyl-grad-${idx}`} key={`cyl-grad-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={c1} stopOpacity={1} />
-                    <stop offset="100%" stopColor={c2} stopOpacity={1} />
-                  </linearGradient>
-                );
-              })}
-            </defs>
-
-            {/* <CartesianGrid stroke="#444" strokeDasharray="3 3" /> */}
-            <XAxis
-              dataKey="floor"
-              tick={{ fontSize: 12, fill: '#fff' }}
-              interval={0}
-              height={80}
-            />
-            {/* NEW: use yDomainMax (derived from maxLive) to make bars visually larger */}
-            <YAxis
-              tick={{ fontSize: 13, fill: '#fff' }}
-              domain={[0, yDomainMax]}
-            />
-            <Tooltip content={renderTooltip} />
-            <Legend
-              verticalAlign="top"
-              align="center"
-              wrapperStyle={{ color: '#fff', paddingBottom: 8 }}
-              payload={[
-                { value: 'Live HeadCount', type: 'square', color: '#4DB8FF' }
-              ]}
-            />
-
-            <Bar dataKey="liveCount" barSize={140} shape={<CylinderShape />}>
-              {chartData.map((d, idx) => (
-                <Cell key={`cyl-cell-${idx}`} fill={`url(#cyl-grad-${idx})`} />
-              ))}
-              <LabelList
-                dataKey="liveCount"
-                position="top"
-                formatter={(val) => val}
-                style={{ fill: '#fff', fontSize: 15, fontWeight: '800' }}
-              />
-            </Bar>
-            {/* overlay: curve passing through top-centers */}
-            <Customized component={(props) => <CurveOverlay {...props} />} />
-          </BarChart>
-        </ResponsiveContainer>
       </Card.Body>
     </Card>
   );
 }
-
-
-
-
-
-
-
 
 
 

@@ -1,112 +1,204 @@
+// src/components/FloorOccupancyChart.jsx
 
-// src/components/PersonnelDonutChart.jsx
-
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
-  PieChart, Pie, Cell, Tooltip,
-  ResponsiveContainer, Legend, Label
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  LabelList,
+  Legend
 } from 'recharts';
 import { Card } from 'react-bootstrap';
+import floorCapacities from '../constants/floorCapacities';
 
-// Expanded Western Union–style palette for up to 10 categories
-const SLICE_COLORS = [
-  '#FFC72C', // yellow
-  '#228B22', // forest green
-  '#EEA0F1',
-  '#E18E30',
-  '#B5B21A',
-  '#FFE680', // light yellow
-  '#FFD11A', // gold
-  '#FFEB99', // pale gold
-  '#C9A9A6', // muted rose
-  '#96DED1', // teal
-  '#FF8C00', // dark orange
-  '#8B0000', // dark red
-  '#4B0082'  // indigo
-];
+// ─── CUSTOM TOOLTIP ───────────────────────────────────────────────────────────
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  const { capacity, headcount, percentage } = payload[0].payload;
+  return (
+    <div style={{
+      background: '#2f2f2f',
+      border: '1px solid #444',
+      borderRadius: 4,
+      padding: '8px 12px',
+      color: '#fff',
+      fontSize: 14,
+      lineHeight: 1.4
+    }}>
+      <strong style={{ color: '#FFC72C' }}>{label}</strong><br/>
+      Occupancy: <strong>{capacity}</strong><br/>
+      Headcount: <strong>{headcount}</strong><br/>
+      Usage: <strong>{percentage.toFixed(1)}%</strong>
+    </div>
+  );
+};
 
-export default function PersonnelDonutChart({ data = [] }) {
-  // Sum all counts across every category in `data`
-  const total = data.reduce((sum, e) => sum + e.count, 0);
 
-  if (!data.length || total === 0) {
-    return (
-      <Card body className="bg-dark text-warning">
-        No personnel data
-      </Card>
-    );
-  }
 
-  // Sort descending by count so largest slice is first
-  const sorted = [...data].sort((a, b) => b.count - a.count);
+
+// place headcount label just inside the top of the green bar
+const HeadcountLabel = ({ x, y, width, value }) => (
+  <text
+    x={x + width / 2}
+    y={y - 6}            // <-- moved above the top edge by 6px
+    textAnchor="middle"
+    fill="#228B22"
+    margin="6"
+    fontWeight="bold"
+    fontSize={15}
+  >
+    {value}
+  </text>
+);
+
+
+
+
+
+const CapacityLabel = ({ x, y, width, payload }) => {
+  if (!payload) return null;
+  return (
+    <text
+      x={x + width / 2}
+      y={y - 6}
+      textAnchor="middle"
+      fill="#000"
+      fontWeight="bold"
+      fontSize={14}
+    >
+      {payload.capacity}
+    </text>
+  );
+};
+
+// ─── PERCENTAGE LABEL (Infographic style) ────────────────────────────────────
+const PercentageLabel = ({ x, y, width, value }) => (
+  <text
+    x={x + width / 2}
+    y={y - 20}
+    textAnchor="middle"
+    fill="#FFC72C"
+    fontWeight="bold"
+    fontSize={14}
+  >
+    {value.toFixed(1)}%
+  </text>
+);
+
+export default function FloorOccupancyChart({ data = [] }) {
+  // Build per-floor list + aggregate
+  const floors = useMemo(() => {
+    const list = Object.entries(floorCapacities).map(([floor, capacity]) => {
+      const rec = data.find(d =>
+        d.floor.replace(/^Floor\s0*/, 'Floor ') === floor
+      );
+       const headcount = rec ? Number(rec.total) || 0 : 0;
+
+      
+     // use totalPersons (not total) from your API
+    //  const headcount = rec ? Number(rec.totalPersons) || 0 : 0;
+      const percentage = capacity > 0 ? (headcount / capacity) * 100 : 0;
+      return { floor, capacity, headcount, free: capacity - headcount, percentage };
+    });
+
+    const totalCapacity  = list.reduce((sum, f) => sum + f.capacity, 0);
+    const totalHeadcount = list.reduce((sum, f) => sum + f.headcount, 0);
+    const totalPct       = totalCapacity > 0 ? (totalHeadcount / totalCapacity) * 100 : 0;
+    const aggregate = {
+      floor: 'All Floors',
+      capacity: totalCapacity,
+      headcount: totalHeadcount,
+      free: totalCapacity - totalHeadcount,
+      percentage: totalPct
+    };
+
+    return [aggregate, ...list];
+  }, [data]);
+
+  const maxCap = Math.max(...floors.map(f => f.capacity));
+
+  const legendPayload = [
+    { value: 'Headcount',          type: 'square', id: 'headcount', color: '#228B22' },
+    { value: 'Occupancy', type: 'square', id: 'free',      color: '#FFD700' }
+  ];
 
   return (
-    <Card
-      className="mb-4 shadow-sm"
-      style={{ background: '#1a1a1a', border: '2px solid #FFC72C' }}
-    >
-      <Card.Header
-        className="text-center fw-bold"
-        style={{ background: '#000', color: '#FFC72C' }}
-      >
-        Personnel Type Occupancy
+    <Card className="mb-4 shadow-sm" style={{ background: '#1a1a1a', border: '2px solid #FFC72C' }}>
+      <Card.Header className="text-center" style={{ background: '#000', color: '#FFC72C' }}>
+        Western Union – Denver Headcount vs. Occupancy
       </Card.Header>
-      <Card.Body style={{ height: 450, padding: '1rem' }}>
-        <ResponsiveContainer >
-          <PieChart>
-            <Pie
-              data={sorted}
-              dataKey="count"
-              nameKey="personnelType"
-              cx="50%" cy="50%"
-              innerRadius={70} outerRadius={140}
-              paddingAngle={4}
-              labelLine={false}
-              label={({ percent, name }) => (
-                <tspan fill="#fff">
-                  {`${name}: ${(percent * 100).toFixed(0)}%`}
-                </tspan>
-              )}
-              stroke="#FFF"
-              strokeWidth={1.5}
-            >
-              {sorted.map((entry, idx) => (
-                <Cell
-                  key={entry.personnelType}
-                  fill={SLICE_COLORS[idx % SLICE_COLORS.length]}
-                  
-                />
-              ))}
-              <Label
-                value={total}
-                position="center"
-                style={{ fill: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}
-              />
-            </Pie>
-            <Tooltip
-              wrapperStyle={{
-                backgroundColor: '#2f2f2f',
-                border: '1px solid #444',
-
-                borderRadius: '4px',
-                color: '#fff'
+      <Card.Body style={{ height: 450, padding: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={floors}
+            margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+            barCategoryGap="10%"
+            barGap={4}
+          >
+            <CartesianGrid stroke="#444" strokeDasharray="4 4" />
+            <XAxis
+              dataKey="floor"
+              tick={{ fill: '#fff', fontSize: 15 }}
+              label={{ value: 'Floor', fill: '#fff', position: 'bottom', offset: 20 }}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fill: '#fff', fontSize: 15 }}
+              domain={[0, maxCap]}
+              label={{
+                value: 'Headcount',
+                fill: '#fff',
+                angle: -90,
+                position: 'insideLeft',
+                offset: 10
               }}
-              formatter={(value, name) => [`${value}`, `${name}`]}
             />
+            <Tooltip content={<CustomTooltip />} />
             <Legend
-              verticalAlign="bottom"
-              wrapperStyle={{ color: '#fff', paddingTop: 10 }}
+              verticalAlign="top"
+              align="center"
+              payload={legendPayload}
+              wrapperStyle={{ color: '#fff', paddingBottom: 10 }}
             />
-          </PieChart>
+
+            {/* Headcount (green) */}
+            {/* <Bar dataKey="headcount" stackId="a" fill="#228B22" fontSize={15} fontWeight={15}> */}
+
+            <Bar
+              dataKey="headcount"
+              stackId="a"
+              fill="#228B22"
+              stroke="#000"        // ← add a black border
+              strokeWidth={2}
+            >
+
+              {/* <LabelList dataKey="headcount" content={HeadcountLabel} /> */}
+            </Bar>
+
+            {/* Remaining capacity (yellow) */}
+            {/* <Bar dataKey="free" stackId="a" fill="#FFD700" fontSize={15}> */}
+
+            <Bar
+              dataKey="free"
+              stackId="a"
+              fill="#FFD700"
+              stroke="#000"        // ← add a black border
+              strokeWidth={1}
+            >
+
+              <LabelList dataKey="free" content={CapacityLabel} />
+              <LabelList dataKey="percentage" content={PercentageLabel} />
+               {/* also render headcount here so it appears above the yellow */}
+              <LabelList dataKey="headcount" content={HeadcountLabel} fontSize={15} />
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       </Card.Body>
     </Card>
   );
 }
-
-
-
-
-
-
 

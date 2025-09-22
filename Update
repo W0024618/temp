@@ -1,204 +1,95 @@
-// src/components/FloorOccupancyChart.jsx
+// src/pages/DashboardHome.jsx
 
-import React, { useMemo } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  LabelList,
-  Legend
-} from 'recharts';
-import { Card } from 'react-bootstrap';
-import floorCapacities from '../constants/floorCapacities';
+import React from 'react';
+import { Container, Row, Col } from 'react-bootstrap';
 
-// ─── CUSTOM TOOLTIP ───────────────────────────────────────────────────────────
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  const { capacity, headcount, percentage } = payload[0].payload;
-  return (
-    <div style={{
-      background: '#2f2f2f',
-      border: '1px solid #444',
-      borderRadius: 4,
-      padding: '8px 12px',
-      color: '#fff',
-      fontSize: 14,
-      lineHeight: 1.4
-    }}>
-      <strong style={{ color: '#FFC72C' }}>{label}</strong><br/>
-      Occupancy: <strong>{capacity}</strong><br/>
-      Headcount: <strong>{headcount}</strong><br/>
-      Usage: <strong>{percentage.toFixed(1)}%</strong>
-    </div>
-  );
-};
+import SummaryCards from '../components/SummaryCards';
+import FloorOccupancyChart from '../components/FloorOccupancyChart';
+import PersonnelDonutChart from '../components/PersonnelDonutChart';
+import FloorInOutTable from '../components/FloorInOutTable';
 
+export default function DashboardHome({
+  personnelSummary,
+  totalVisitedToday,
+  visitedToday,
+  floorData,
+  personnelBreakdown,
+  floorInOutSummary
+}) {
+  const employees = personnelSummary?.employees ?? 0;
+  const contractors = personnelSummary?.contractors ?? 0;
+  const totalOccupancy = employees + contractors;
 
-
-
-// place headcount label just inside the top of the green bar
-const HeadcountLabel = ({ x, y, width, value }) => (
-  <text
-    x={x + width / 2}
-    y={y - 6}            // <-- moved above the top edge by 6px
-    textAnchor="middle"
-    fill="#228B22"
-    margin="6"
-    fontWeight="bold"
-    fontSize={15}
-  >
-    {value}
-  </text>
-);
-
-
-
-
-
-const CapacityLabel = ({ x, y, width, payload }) => {
-  if (!payload) return null;
-  return (
-    <text
-      x={x + width / 2}
-      y={y - 6}
-      textAnchor="middle"
-      fill="#000"
-      fontWeight="bold"
-      fontSize={14}
-    >
-      {payload.capacity}
-    </text>
-  );
-};
-
-// ─── PERCENTAGE LABEL (Infographic style) ────────────────────────────────────
-const PercentageLabel = ({ x, y, width, value }) => (
-  <text
-    x={x + width / 2}
-    y={y - 20}
-    textAnchor="middle"
-    fill="#FFC72C"
-    fontWeight="bold"
-    fontSize={14}
-  >
-    {value.toFixed(1)}%
-  </text>
-);
-
-export default function FloorOccupancyChart({ data = [] }) {
-  // Build per-floor list + aggregate
-  const floors = useMemo(() => {
-    const list = Object.entries(floorCapacities).map(([floor, capacity]) => {
-      const rec = data.find(d =>
-        d.floor.replace(/^Floor\s0*/, 'Floor ') === floor
-      );
-       const headcount = rec ? Number(rec.total) || 0 : 0;
-
-      
-     // use totalPersons (not total) from your API
-    //  const headcount = rec ? Number(rec.totalPersons) || 0 : 0;
-      const percentage = capacity > 0 ? (headcount / capacity) * 100 : 0;
-      return { floor, capacity, headcount, free: capacity - headcount, percentage };
-    });
-
-    const totalCapacity  = list.reduce((sum, f) => sum + f.capacity, 0);
-    const totalHeadcount = list.reduce((sum, f) => sum + f.headcount, 0);
-    const totalPct       = totalCapacity > 0 ? (totalHeadcount / totalCapacity) * 100 : 0;
-    const aggregate = {
-      floor: 'All Floors',
-      capacity: totalCapacity,
-      headcount: totalHeadcount,
-      free: totalCapacity - totalHeadcount,
-      percentage: totalPct
-    };
-
-    return [aggregate, ...list];
-  }, [data]);
-
-  const maxCap = Math.max(...floors.map(f => f.capacity));
-
-  const legendPayload = [
-    { value: 'Headcount',          type: 'square', id: 'headcount', color: '#228B22' },
-    { value: 'Occupancy', type: 'square', id: 'free',      color: '#FFD700' }
-  ];
+  const chartData = personnelBreakdown.map(({ personnelType, count }) => ({
+    personnelType,
+    count
+  }));
 
   return (
-    <Card className="mb-4 shadow-sm" style={{ background: '#1a1a1a', border: '2px solid #FFC72C' }}>
-      <Card.Header className="text-center" style={{ background: '#000', color: '#FFC72C' }}>
-        Western Union – Denver Headcount vs. Occupancy
-      </Card.Header>
-      <Card.Body style={{ height: 450, padding: 0 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={floors}
-            margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
-            barCategoryGap="10%"
-            barGap={4}
-          >
-            <CartesianGrid stroke="#444" strokeDasharray="4 4" />
-            <XAxis
-              dataKey="floor"
-              tick={{ fill: '#fff', fontSize: 15 }}
-              label={{ value: 'Floor', fill: '#fff', position: 'bottom', offset: 20 }}
-            />
-            <YAxis
-              allowDecimals={false}
-              tick={{ fill: '#fff', fontSize: 15 }}
-              domain={[0, maxCap]}
-              label={{
-                value: 'Headcount',
-                fill: '#fff',
-                angle: -90,
-                position: 'insideLeft',
-                offset: 10
-              }}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend
-              verticalAlign="top"
-              align="center"
-              payload={legendPayload}
-              wrapperStyle={{ color: '#fff', paddingBottom: 10 }}
-            />
+    <Container fluid className="py-4">
+      <SummaryCards
+        totalOccupancy={totalOccupancy}
+        employeeCount={employees}
+        contractorCount={contractors}
+        totalVisitedToday={totalVisitedToday}
+        employeesVisitedToday={visitedToday?.employees ?? 0}
+        contractorsVisitedToday={visitedToday?.contractors ?? 0}
+      />
 
-            {/* Headcount (green) */}
-            {/* <Bar dataKey="headcount" stackId="a" fill="#228B22" fontSize={15} fontWeight={15}> */}
+      {/* Dashboard Charts + In/Out Table in one row */}
+      <Row className="g-4">
+        <Col md={4}>
+          <FloorOccupancyChart data={floorData} />
+        </Col>
+        <Col md={4}>
+          <PersonnelDonutChart data={chartData} />
+        </Col>
 
-            <Bar
-              dataKey="headcount"
-              stackId="a"
-              fill="#228B22"
-              stroke="#000"        // ← add a black border
-              strokeWidth={2}
-            >
+        {/* <Row className="g-4"> */}
+        {/* <Col md={4}>
+          <FloorInOutTable data={floorInOutSummary} />
+        </Col> */}
 
-              {/* <LabelList dataKey="headcount" content={HeadcountLabel} /> */}
-            </Bar>
+        {/* ⬇️this add by mayur */}
+        <Col md={4}>
+          <FloorInOutTable
+            data={floorInOutSummary}
+            floorBreakdown={floorData}
+            floorInOutSummary={floorInOutSummary}
 
-            {/* Remaining capacity (yellow) */}
-            {/* <Bar dataKey="free" stackId="a" fill="#FFD700" fontSize={15}> */}
+          />
+        </Col>
+      </Row>
 
-            <Bar
-              dataKey="free"
-              stackId="a"
-              fill="#FFD700"
-              stroke="#000"        // ← add a black border
-              strokeWidth={1}
-            >
-
-              <LabelList dataKey="free" content={CapacityLabel} />
-              <LabelList dataKey="percentage" content={PercentageLabel} />
-               {/* also render headcount here so it appears above the yellow */}
-              <LabelList dataKey="headcount" content={HeadcountLabel} fontSize={15} />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </Card.Body>
-    </Card>
+      {/* Footer */}
+      <footer
+        style={{
+          backgroundColor: '#000',
+          color: '#FFC72C',
+          padding: '1.5rem 0',
+          textAlign: 'center',
+          marginTop: '2rem',
+          borderTop: '2px solid #FFC72C',
+          fontSize: '0.95rem',
+          lineHeight: '1.6'
+        }}
+      >
+        <div>
+          <strong>Global Security Operations Center (GSOC)</strong><br />
+          Live Occupancy dashboard for Western Union Denver — Real-time occupancy, floor activity, and personnel insights.
+        </div>
+        <div style={{ marginTop: '0.75rem' }}>
+          Contact us: <a href="mailto:GSOC-GlobalSecurityOperationCenter.SharedMailbox@westernunion.com" style={{ color: '#FFC72C', textDecoration: 'underline' }}>gsoc@westernunion.com</a> |
+          Landline: <span style={{ color: '#FFC72C' }}>+91-020-67632394</span>
+        </div>
+      </footer>
+    </Container>
   );
 }
+
+
+
+
+
+
 

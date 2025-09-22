@@ -1,95 +1,109 @@
-// src/pages/DashboardHome.jsx
 
-import React from 'react';
-import { Container, Row, Col } from 'react-bootstrap';
+// src/components/FloorDetailsPage.jsx
+import React, { useState } from 'react';
+import { Container, Row, Col, Card, Table, Form } from 'react-bootstrap';
 
-import SummaryCards from '../components/SummaryCards';
-import FloorOccupancyChart from '../components/FloorOccupancyChart';
-import PersonnelDonutChart from '../components/PersonnelDonutChart';
-import FloorInOutTable from '../components/FloorInOutTable';
+export default function FloorDetailsPage({ floorData = [] }) {
+  const [search, setSearch] = useState('');
 
-export default function DashboardHome({
-  personnelSummary,
-  totalVisitedToday,
-  visitedToday,
-  floorData,
-  personnelBreakdown,
-  floorInOutSummary
-}) {
-  const employees = personnelSummary?.employees ?? 0;
-  const contractors = personnelSummary?.contractors ?? 0;
-  const totalOccupancy = employees + contractors;
+  if (!floorData.length) {
+    return <p className="text-center mt-4 text-white">No floor details available.</p>;
+  }
 
-  const chartData = personnelBreakdown.map(({ personnelType, count }) => ({
-    personnelType,
-    count
-  }));
+  // Sort floors descending by total occupants
+  const sortedFloorData = [...floorData].sort((a, b) => b.total - a.total);
 
   return (
     <Container fluid className="py-4">
-      <SummaryCards
-        totalOccupancy={totalOccupancy}
-        employeeCount={employees}
-        contractorCount={contractors}
-        totalVisitedToday={totalVisitedToday}
-        employeesVisitedToday={visitedToday?.employees ?? 0}
-        contractorsVisitedToday={visitedToday?.contractors ?? 0}
-      />
+      <style>{`
+        .search-input::placeholder { color: #ffffff !important; opacity: 0.6; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-thumb { background-color: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background-color: #1c1c1c; }
+        .dark-row-even { background-color: #2a2a2a !important; color: #fff !important; }
+        .dark-row-odd  { background-color: #1c1c1c !important; color: #fff !important; }
+        th, td { border: 1px solid #444 !important; }
+      `}</style>
 
-      {/* Dashboard Charts + In/Out Table in one row */}
-      <Row className="g-4">
-        <Col md={4}>
-          <FloorOccupancyChart data={floorData} />
-        </Col>
-        <Col md={4}>
-          <PersonnelDonutChart data={chartData} />
-        </Col>
+      {/* Search Input */}
+      <Form.Group className="mb-3" controlId="search" style={{ maxWidth: 300 }}>
+        <Form.Control
+          type="text"
+          placeholder="Search by Name or ID"
+          value={search}
+          onChange={(e) => setSearch(e.target.value.toLowerCase())}
+          className="search-input"
+          style={{ backgroundColor: '#1c1c1c', color: '#fff', border: '1px solid #FFC72C' }}
+        />
+      </Form.Group>
 
-        {/* <Row className="g-4"> */}
-        {/* <Col md={4}>
-          <FloorInOutTable data={floorInOutSummary} />
-        </Col> */}
+      <Row xs={1} md={2} lg={3} className="g-4">
+        {sortedFloorData.map(({ floor, total, occupants }) => {
+          const filtered = occupants.filter(
+            (emp) =>
+              emp.ObjectName1?.toLowerCase().includes(search) ||
+              emp.EmployeeID?.toString().includes(search)
+          );
 
-        {/* ⬇️this add by mayur */}
-        <Col md={4}>
-          <FloorInOutTable
-            data={floorInOutSummary}
-            floorBreakdown={floorData}
-            floorInOutSummary={floorInOutSummary}
+          if (search && filtered.length === 0) return null;
 
-          />
-        </Col>
+          return (
+            <Col key={floor}>
+              <Card className="h-100 shadow-sm" style={{ border: '2px solid #FFC72C' }}>
+                <Card.Header
+                  className="fw-bold"
+                  style={{ backgroundColor: '#FFC72C', color: '#1c1c1c' }}
+                >
+                  {floor} — Total: {filtered.length}
+                </Card.Header>
+                <Card.Body
+                  style={{
+                    overflowY: 'auto',
+                    maxHeight: 600,
+                    backgroundColor: '#1c1c1c',
+                    padding: 0
+                  }}
+                >
+                  <Table
+                    size="sm"
+                    className="mb-0"
+                    striped
+                    hover
+                    responsive
+                    style={{ color: '#fff' }}
+                  >
+                    <thead style={{ backgroundColor: '#2a2a2a', color: '#FFC72C' }}>
+                      <tr>
+                        <th>Name</th>
+                        <th>Emp ID</th>
+                        <th>Swipe Time</th>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Door Name</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((emp, idx) => (
+                        <tr
+                          key={`${emp.EmployeeID}-${idx}`}
+                          className={idx % 2 === 0 ? 'dark-row-even' : 'dark-row-odd'}
+                        >
+                          <td>{emp.ObjectName1}</td>
+                          <td>{emp.EmployeeID}</td>
+                          <td>{emp.Swipe_Time}</td>
+                          <td>{emp.Dateonly}</td>
+                          <td>{emp.PersonnelType}</td>
+                          <td>{emp.Door}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </Card.Body>
+              </Card>
+            </Col>
+          );
+        })}
       </Row>
-
-      {/* Footer */}
-      <footer
-        style={{
-          backgroundColor: '#000',
-          color: '#FFC72C',
-          padding: '1.5rem 0',
-          textAlign: 'center',
-          marginTop: '2rem',
-          borderTop: '2px solid #FFC72C',
-          fontSize: '0.95rem',
-          lineHeight: '1.6'
-        }}
-      >
-        <div>
-          <strong>Global Security Operations Center (GSOC)</strong><br />
-          Live Occupancy dashboard for Western Union Denver — Real-time occupancy, floor activity, and personnel insights.
-        </div>
-        <div style={{ marginTop: '0.75rem' }}>
-          Contact us: <a href="mailto:GSOC-GlobalSecurityOperationCenter.SharedMailbox@westernunion.com" style={{ color: '#FFC72C', textDecoration: 'underline' }}>gsoc@westernunion.com</a> |
-          Landline: <span style={{ color: '#FFC72C' }}>+91-020-67632394</span>
-        </div>
-      </footer>
     </Container>
   );
 }
-
-
-
-
-
-
-

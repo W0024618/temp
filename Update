@@ -1,5 +1,66 @@
 
 
+// data/zoneFloorMap.js
+
+const zoneFloorMap = {
+  // Podium Floor
+  "Red Zone":                    "Podium Floor",
+  "Yellow Zone":                 "Podium Floor",
+  "Reception Area":              "Podium Floor",
+  "Green Zone":                  "Podium Floor",
+  "Orange Zone":                 "Podium Floor",
+  "Gsoc Zone":                   "Podium Floor",
+  "Assembly Area":               "Podium Floor",
+  //"Red":"Podium Floor",
+
+  // 2nd Floor
+  "2nd Floor, Pune":             "2nd Floor",
+
+  // Tower B
+  "Tower B":                     "Tower B",
+  "Reception Area Tower B":      "Tower B",
+  "Tower B GYM":                 "Tower B",
+
+  // Outer‐Area variants (same floors as their base zones)
+  "East Outdoor Area":                 "Podium Floor",
+  "West Outdoor Area":            "Podium Floor",
+  "Reception Area - Outer Area":         "Podium Floor",
+
+  "Assembly Area - Outer Area":          "Podium Floor",
+  "2nd Floor, Pune - Outer Area":        "2nd Floor",
+  "Tower B - Outer Area":                "Tower B",
+  "Reception Area Tower B - Outer Area": "Tower B",
+  "Tower B GYM - Outer Area":            "Tower B",
+
+  // True “Out of office” eviction (we filter these out in the controller)
+  "Out of office":               "Podium Floor"
+};
+
+module.exports = zoneFloorMap;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // data/doorZoneMap.js
 

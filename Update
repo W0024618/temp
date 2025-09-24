@@ -1,3 +1,7 @@
+Get-NetTCPConnection -LocalPort 3010 | Format-Table -AutoSize
+
+
+
 // C:\... \controllers\liveOccupancyController.js
 const { DateTime }   = require('luxon');
 // const { poolConnect, pool, sql } = require('../config/db');

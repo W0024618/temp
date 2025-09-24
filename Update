@@ -27,6 +27,7 @@ js:479:19)
 Node.js v22.16.0
 PS D:\DASHBOARD\swipeData\employee-ai-insights>
 
+
 // C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\routes\liveOccupancyRoutes.js
 const express = require('express');
 const router  = express.Router();
@@ -46,6 +47,94 @@ router.get('/occupancy-at-time-pune', getPuneSnapshotAtDateTime);
 router.get('/monthly-summary', getMonthlySummary);
 module.exports = router;
 
+// server.js D:\DASHBOARD\swipeData\employee-ai-insights\server.js
+require('dotenv').config();
+console.log('▶︎ Loading:', __filename);
+console.log('▶︎ CWD:', process.cwd());
+
+const express = require('express');
+const cors    = require('cors');
+const path    = require('path');
+
+// Import your SSE controllers directly:
+const { getLiveOccupancy ,getPuneSnapshotAtDateTime}          = require('./controllers/liveOccupancyController');
+const { getDenverLiveOccupancy ,getDenverSnapshotAtDateTime}      = require('./controllers/denverLiveOccupancyController');
+const { getDenverInOutInconsistency } = require('./controllers/denverInOutInconsistencyController');
+const{getRejections}=require('./controllers/denverRejection');
+
+
+
+// If you still need employeeRoutes, you can mount it as well:
+const employeeRoutes = require('./routes/employeeRoutes');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Log every incoming request
+app.use((req, res, next) => {
+  console.log(`➡︎ ${req.method} ${req.url}`);
+  next();
+});
+
+// Sanity‐check
+app.get('/ping', (req, res) => res.send('pong'));
+
+// SSE no‐buffering helper
+const noBuffering = (req, res, next) => {
+  res.set('X-Accel-Buffering', 'no');
+  next();
+};
+
+// 1) Employee API (if you still need it)
+app.use('/api/employees', employeeRoutes);
+
+// 2) Pune live‐occupancy SSE
+app.get('/api/live-occupancy', noBuffering, getLiveOccupancy);
+
+// 3) Denver live‐occupancy SSE
+app.get('/api/live-occupancy-denver', noBuffering, getDenverLiveOccupancy);
+
+// 4) Denver in/out‐inconsistency SSE
+app.get('/api/inout-inconsistency-denver', noBuffering, getDenverInOutInconsistency);
+
+
+app.get('/api/occupancy-at-time-pune', noBuffering, getPuneSnapshotAtDateTime);
+app.get('/api/occupancy-at-time-denver',noBuffering, getDenverSnapshotAtDateTime);
+app.get('/api/rejections',noBuffering, getRejections);
+
+//router.get('/occupancy-at-time-denver', getDenverSnapshotAtDateTime);
+
+//router.get("/rejections", getRejections);
+
+
+
+// Serve React build & health
+const buildPath = path.join(__dirname, '..', 'client', 'build');
+app.use(express.static(buildPath));
+app.get('/health', (req, res) => res.send('OK'));
+
+// 404 catcher
+app.use((req, res) => {
+  console.log(`⚠️  No route for ${req.method} ${req.url}`);
+  res.status(404).send(`Cannot ${req.method} ${req.url}`);
+});
+
+const PORT = process.env.PORT || 3010;
+app.listen(PORT, '0.0.0.0', () =>
+  console.log(`✔️  Server listening on http://0.0.0.0:${PORT}`)
+);
+
+
+
+
+
+
+
+
+
+----
+// C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\controllers\liveOccupancyController.js
 
 
 const { DateTime }   = require('luxon');

@@ -1,3 +1,132 @@
+// --- replace the existing exports.getLiveOccupancy = async (req, res) => { ... } ---
+exports.getLiveOccupancy = async (req, res) => {
+  try {
+    // wait for the shared pool to be ready
+    await getPool();
+
+    res.writeHead(200, {
+      'Content-Type':  'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection':    'keep-alive'
+    });
+
+    // send an initial SSE comment so clients see immediate activity
+    res.write(': connected\n\n');
+
+    // pull last 24h on startup
+    let lastSeen = new Date();
+    const events = [];
+
+    const push = async () => {
+      try {
+        // Option B: Recompute date from the JS timestamp in Asia/Kolkata:
+        const todayKolkata = DateTime.now().setZone('Asia/Kolkata').toISODate();
+        for (let i = events.length - 1; i >= 0; i--) {
+          try {
+            // tolerate either JS Date or ISO string
+            const evtTime = events[i].LocaleMessageTime;
+            const jsDate = (evtTime instanceof Date) ? evtTime : new Date(evtTime);
+            const ts = DateTime.fromJSDate(jsDate, { zone: 'utc' })
+                           .setZone('Asia/Kolkata')
+                           .toISODate();
+            if (ts !== todayKolkata) {
+              events.splice(i, 1);
+            }
+          } catch (e) {
+            // if any event's timestamp looks bad, drop it
+            events.splice(i, 1);
+          }
+        }
+
+        // fetch new events since lastSeen
+        const fresh = await fetchNewEvents(lastSeen);
+
+        if (fresh && fresh.length) {
+          // update lastSeen to the last row's timestamp if available
+          const lastRow = fresh[fresh.length - 1];
+          if (lastRow && lastRow.LocaleMessageTime) {
+            lastSeen = (lastRow.LocaleMessageTime instanceof Date)
+              ? lastRow.LocaleMessageTime
+              : new Date(lastRow.LocaleMessageTime);
+          } else {
+            lastSeen = new Date();
+          }
+          events.push(...fresh);
+        }
+
+        // build occupancy + today counts
+        const occupancy  = await buildOccupancy(events);
+        const todayStats = buildVisitedToday(events);
+
+        occupancy.totalVisitedToday = todayStats.total;
+        occupancy.visitedToday      = {
+          employees:   todayStats.employees,
+          contractors: todayStats.contractors,
+          total:       todayStats.total
+        };
+
+        // add an `id:` so EventSource treats even identical payloads as “new”
+        const sid = Date.now();
+        res.write(`id: ${sid}\n`);
+        res.write(`data: ${JSON.stringify(occupancy)}\n\n`);
+
+        if (typeof res.flush === 'function') {
+          res.flush();
+        }
+      } catch (err) {
+        console.error('🔴 [PUSH] error inside push():', err && err.stack ? err.stack : err);
+        // send an SSE error event so clients see something
+        try {
+          res.write(`event: error\ndata: ${JSON.stringify({ message: err.message || String(err) })}\n\n`);
+          if (typeof res.flush === 'function') res.flush();
+        } catch (e) {
+          // ignore write failures (client may have disconnected)
+        }
+      }
+    };
+
+    // run first push and then schedule
+    await push();
+    const timer = setInterval(push, 2000);
+    req.on('close', () => {
+      clearInterval(timer);
+    });
+
+  } catch (err) {
+    console.error('Live occupancy SSE error:', err && err.stack ? err.stack : err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  }
+};
+
+
+
+
+
+
+
+
+
+process.on('unhandledRejection', (reason, p) => {
+  console.error('❌ Unhandled Rejection at:', p, 'reason:', reason && reason.stack ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught exception:', err && err.stack ? err.stack : err);
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
 Check below swipe backend details carefully our isuue is When i run any API on browser it does not display any output so which is need to fix ..
 http://10.199.22.57:3010/api/live-occupancy
 i have test this API endpoint so debug each below file line by line and fix the issue carefully..

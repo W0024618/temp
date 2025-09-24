@@ -1,117 +1,79 @@
+// C:\Users\W0024618\Desktop\swipeData\client\src\components\LoadingSpinner.jsx
+import React from "react";
 
-
-// src/pages/DashboardHome.jsx
-import React, { useMemo, lazy, Suspense, useDeferredValue } from 'react';
-import { Container, Row, Col } from 'react-bootstrap';
-
-import SummaryCards from '../components/SummaryCards';
-import LoadingSpinner from '../components/LoadingSpinner';
-
-// lazy-load charts (prefetch so browser can warm the chunk after idle)
-const FloorOccupancyChart = lazy(() => import(
-  /* webpackChunkName: "floor-chart", webpackPrefetch: true */ '../components/FloorOccupancyChart'
-));
-const SummaryChart = lazy(() => import(
-  /* webpackChunkName: "summary-chart", webpackPrefetch: true */ '../components/SummaryChart'
-));
-const PersonnelDonutChart = lazy(() => import(
-  /* webpackChunkName: "personnel-donut", webpackPrefetch: true */ '../components/PersonnelDonutChart'
-));
-
-/**
- * DashboardHome
- * - Always render SummaryCards immediately (fast first meaningful paint)
- * - Defer heavy chart rendering with useDeferredValue + Suspense fallbacks
- * - Memoize chart data so children only get new props when the source changes
- */
-function DashboardHome({
-  summaryData = [],
-  detailsData,
-  floorData = [],
-  zoneBreakdown,
-  personnelBreakdown = [],
-  totalVisitedToday = 0,
-  personnelSummary = { employees: 0, contractors: 0 },
-  visitedToday = {},
-  ertStatus
-}) {
-  // small cheap derived numbers shown in SummaryCards (fast)
-  const employees = personnelSummary?.employees ?? 0;
-  const contractors = personnelSummary?.contractors ?? 0;
-  const totalOccupancy = employees + contractors;
-
-  // memoize chart input transforms (cheap => prevents child re-render unless source changes)
-  const chartData = useMemo(() => {
-    return (personnelBreakdown || []).map(({ personnelType, count }) => ({ personnelType, count }));
-  }, [personnelBreakdown]);
-
-  // useDeferredValue prevents urgent UI (summary cards) from being blocked by chart updates
-  const deferredChartData = useDeferredValue(chartData);
-  const deferredFloorData = useDeferredValue(floorData || []);
-  const deferredSummary = useDeferredValue(summaryData || []);
-
-  // NOTE: Do NOT block entire page on charts. Always show summary cards immediately.
-  // Charts will show loading placeholders until their lazy chunks and data are ready.
-
+export default function LoadingSpinner({ size = 120, message }) {
   return (
-    <Container fluid className="py-4">
-      {/* Summary: first meaningful paint (always show with minimal compute) */}
-      <SummaryCards
-        totalOccupancy={totalOccupancy}
-        employeeCount={employees}
-        contractorCount={contractors}
-        totalVisitedToday={totalVisitedToday}
-        employeesVisitedToday={visitedToday?.employees ?? 0}
-        contractorsVisitedToday={visitedToday?.contractors ?? 0}
-      />
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "90vh",
+        backgroundColor: "#000", // optional dark overlay for contrast
+      }}
+    >
+      {/* Spinner */}
+      <div className="wu-spinner" style={{ width: size, height: size }}></div>
 
-      {/* Charts row — lazy rendered with Suspense fallback */}
-      <Row className="g-4" style={{ marginTop: 12 }}>
-        <Col md={4} style={{ minHeight: 300 }}>
-          <Suspense fallback={<div style={{height: '100%', display:'flex', alignItems:'center', justifyContent:'center'}}><LoadingSpinner message="Loading chart…" small /></div>}>
-            <FloorOccupancyChart data={deferredFloorData} />
-          </Suspense>
-        </Col>
-
-        <Col md={4} style={{ minHeight: 300 }}>
-          <Suspense fallback={<div style={{height: '100%', display:'flex', alignItems:'center', justifyContent:'center'}}><LoadingSpinner message="Loading chart…" small /></div>}>
-            <SummaryChart summary={deferredSummary} />
-          </Suspense>
-        </Col>
-
-        <Col md={4} style={{ minHeight: 300 }}>
-          <Suspense fallback={<div style={{height: '100%', display:'flex', alignItems:'center', justifyContent:'center'}}><LoadingSpinner message="Loading chart…" small /></div>}>
-            <PersonnelDonutChart data={deferredChartData} />
-          </Suspense>
-        </Col>
-      </Row>
-
-      {/* Footer — reserved space to reduce layout shift */}
-      <footer style={{
-        backgroundColor: '#000',
-        color: '#FFC72C',
-        padding: '1.5rem 0',
-        textAlign: 'center',
-        marginTop: '0rem',
-        borderTop: '2px solid #FFC72C',
-        fontSize: '0.95rem',
-        lineHeight: '1.6',
-        minHeight: 120
-      }}>
-        <div><strong>Global Security Operations Center</strong><br />
-          Live HeadCount against Occupancy dashboard for Western Union Pune — Real-time occupancy, floor activity, and personnel insights.
+      {/* Optional message */}
+      {message && (
+        <div
+          style={{
+            marginTop: "1rem",
+            color: "#FFC72C",
+            fontSize: "1.2rem",
+            fontWeight: "bold",
+            textAlign: "center",
+            fontFamily: "Arial, sans-serif",
+          }}
+        >
+          {message}
         </div>
-        <div style={{ marginTop: '0.75rem' }}>
-          Contact us:&nbsp;
-          <a href="mailto:GSOC-GlobalSecurityOperationCenter.SharedMailbox@westernunion.com"
-             style={{ color: '#FFC72C', textDecoration: 'underline' }}>
-            GSOC Mail
-          </a>&nbsp;|&nbsp;
-          Landline:&nbsp;<span style={{ color: '#FFC72C' }}>+91-020-67632394</span>
-        </div>
-      </footer>
-    </Container>
+      )}
+
+      {/* Spinner styles */}
+      <style>{`
+        .wu-spinner {
+          position: relative;
+          width: 100px;
+          height: 100px;
+        }
+
+        /* Outer ring */
+        .wu-spinner:before {
+          content: '';
+          box-sizing: border-box;
+          position: absolute;
+          inset: 0;
+          border: 8px solid rgba(255, 199, 44, 0.3);
+          border-top-color: #FFC72C;
+          border-radius: 50%;
+          animation: spin 1.5s linear infinite;
+        }
+
+        /* Inner ring */
+        .wu-spinner:after {
+          content: '';
+          box-sizing: border-box;
+          position: absolute;
+          inset: 15%;
+          border: 4px solid rgba(255, 199, 44, 0.2);
+          border-top-color: #FFDD00;
+          border-radius: 50%;
+          animation: spinReverse 1s linear infinite;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        @keyframes spinReverse {
+          0% { transform: rotate(360deg); }
+          100% { transform: rotate(0deg); }
+        }
+      `}</style>
+    </div>
   );
 }
-
-export default React.memo(DashboardHome);

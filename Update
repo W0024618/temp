@@ -1,3 +1,75 @@
+// src/api.js
+import axios from 'axios';
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL)
+  || (process.env.NODE_ENV === 'development' ? 'http://10.199.22.57:3010' : window.location.origin);
+
+const api = axios.create({
+  baseURL: `${API_BASE.replace(/\/$/, '')}/api`
+});
+
+export default api;
+
+
+
+
+
+npm install axios
+# or
+yarn add axios
+
+
+
+
+
+const esUrl = `${API_ORIGIN}/api/live-occupancy`;
+const es = new EventSource(esUrl);
+
+
+
+
+// Return to live mode
+const clearTimeTravel = useCallback(async () => {
+  setTimeTravelLoading(true);
+  try {
+    // Flip the mode — the SSE useEffect will run (timeTravelMode=false) and recreate EventSource.
+    setTimeTravelMode(false);
+    setTimeTravelTimestamp(null);
+
+    // Optionally clear UI while reconnecting:
+    // setLiveData({
+    //   summary: [],
+    //   details: {},
+    //   floorBreakdown: [],
+    //   zoneBreakdown: [],
+    //   personnelBreakdown: [],
+    //   totalVisitedToday: 0,
+    //   personnelSummary: { employees: 0, contractors: 0 },
+    //   visitedToday: { employees: 0, contractors: 0, total: 0 },
+    //   ertStatus: {}
+    // });
+
+    // Do NOT fetch the SSE endpoint with fetch() — it's an EventSource stream, not a JSON endpoint.
+  } finally {
+    setTimeTravelLoading(false);
+  }
+}, [setPayload]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Check below ALl file carefully i have update App.js with current below file then we dont get any output on Dashboard so check each below file carefully and fix the issue carefully
 
 

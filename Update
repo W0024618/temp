@@ -1,3 +1,193 @@
+// Replace the existing "✅ Main SSE Controller" exports.getLiveOccupancy with this:
+exports.getLiveOccupancy = async (req, res) => {
+  try {
+    await getPool();
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive"
+    });
+
+    // initial small ping so client sees a connection immediately
+    try { res.write(': connected\n\n'); } catch (e) {}
+
+    let lastSeen = new Date();
+    let events = [];
+    let occupancy = null;
+    let isPushing = false;
+
+    const push = async () => {
+      if (isPushing) return;
+      isPushing = true;
+
+      try {
+        // fetch new events since lastSeen
+        const fresh = await fetchNewEvents(lastSeen);
+
+        if (Array.isArray(fresh) && fresh.length) {
+          // update lastSeen from DB rows (if present)
+          const lastRow = fresh[fresh.length - 1];
+          lastSeen = lastRow && lastRow.LocaleMessageTime ? (lastRow.LocaleMessageTime instanceof Date ? lastRow.LocaleMessageTime : new Date(lastRow.LocaleMessageTime)) : new Date();
+
+          events.push(...fresh);
+        }
+
+        // Keep only today's events (Kolkata local date)
+        const todayKolkata = DateTime.now().setZone("Asia/Kolkata").toFormat("yyyy-LL-dd");
+        events = events.filter(e => e.Dateonly === todayKolkata);
+
+        // Ensure occupancy object always exists (build from full events)
+        occupancy = await buildOccupancy(events);
+
+        // build "visited today" stats
+        const todayStats = buildVisitedToday(events);
+        occupancy.totalVisitedToday = todayStats.total;
+        occupancy.visitedToday = todayStats;
+
+        // ⚡ Slim payload (summary + breakdowns)
+        const slimPayload = {
+          asOf: occupancy.asOf,
+          personnelSummary: occupancy.personnelSummary,
+          personnelBreakdown: occupancy.personnelBreakdown,
+          floorBreakdown: occupancy.floorBreakdown,
+          zoneBreakdown: occupancy.zoneBreakdown,
+          totalVisitedToday: occupancy.totalVisitedToday,
+          visitedToday: occupancy.visitedToday,
+          ertStatus: occupancy.ertStatus
+        };
+
+        // stream to client
+        const sid = Date.now();
+        res.write(`id: ${sid}\n`);
+        res.write(`data: ${JSON.stringify(slimPayload)}\n\n`);
+
+        if (typeof res.flush === "function") res.flush();
+      } catch (err) {
+        console.error("Live occupancy push error:", err && err.stack ? err.stack : err);
+        // Notify client (SSE error event)
+        try {
+          res.write(`event: error\ndata: ${JSON.stringify({ message: err.message || String(err) })}\n\n`);
+          if (typeof res.flush === "function") res.flush();
+        } catch (e) {}
+      } finally {
+        isPushing = false;
+      }
+    };
+
+    // initial push and then schedule
+    await push();
+    const timer = setInterval(push, 5000);
+    req.on("close", () => clearInterval(timer));
+  } catch (err) {
+    console.error("Live occupancy SSE error:", err && err.stack ? err.stack : err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  }
+};
+
+
+
+
+
+
+
+
+const { getLiveOccupancy ,getPuneSnapshotAtDateTime} = require('./controllers/liveOccupancyController');
+const { getDenverLiveOccupancy ,getDenverSnapshotAtDateTime} = require('./controllers/denverLiveOccupancyController');
+const { getDenverInOutInconsistency } = require('./controllers/denverInOutInconsistencyController');
+const { getRejections } = require('./controllers/denverRejection');
+
+
+
+
+
+// core Pune controller (required but still guard in case it throws)
+let liveCtrl;
+try { liveCtrl = require('./controllers/liveOccupancyController'); } catch (e) {
+  console.error('Failed to load liveOccupancyController:', e && e.stack ? e.stack : e);
+  liveCtrl = null;
+}
+
+// Optional Denver controllers — load them safely (server still starts if they fail)
+let denverLiveCtrl = null;
+try { denverLiveCtrl = require('./controllers/denverLiveOccupancyController'); } catch (e) {
+  console.warn('denverLiveOccupancyController not loaded:', e && e.message ? e.message : e);
+}
+
+let denverInOutCtrl = null;
+try { denverInOutCtrl = require('./controllers/denverInOutInconsistencyController'); } catch (e) {
+  console.warn('denverInOutInconsistencyController not loaded:', e && e.message ? e.message : e);
+}
+
+let denverRejectionsCtrl = null;
+try { denverRejectionsCtrl = require('./controllers/denverRejection'); } catch (e) {
+  console.warn('denverRejection controller not loaded:', e && e.message ? e.message : e);
+}
+
+
+
+
+
+
+
+
+
+// Pune (if controller loaded)
+if (liveCtrl && liveCtrl.getLiveOccupancy) {
+  app.get('/api/live-occupancy', noBuffering, liveCtrl.getLiveOccupancy);
+} else {
+  app.get('/api/live-occupancy', noBuffering, (req, res) => res.status(500).json({ error: 'Pune live controller not available' }));
+}
+if (liveCtrl && liveCtrl.getPuneSnapshotAtDateTime) {
+  app.get('/api/occupancy-at-time-pune', noBuffering, liveCtrl.getPuneSnapshotAtDateTime);
+} else {
+  app.get('/api/occupancy-at-time-pune', noBuffering, (req, res) => res.status(500).json({ error: 'Pune snapshot controller not available' }));
+}
+
+// Denver routes (fallback 501/404 if controller missing)
+app.get('/api/live-occupancy-denver', noBuffering, (req, res, next) => {
+  if (denverLiveCtrl && denverLiveCtrl.getDenverLiveOccupancy) {
+    return denverLiveCtrl.getDenverLiveOccupancy(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver live occupancy controller not available' });
+});
+app.get('/api/occupancy-at-time-denver', noBuffering, (req, res, next) => {
+  if (denverLiveCtrl && denverLiveCtrl.getDenverSnapshotAtDateTime) {
+    return denverLiveCtrl.getDenverSnapshotAtDateTime(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver snapshot controller not available' });
+});
+app.get('/api/inout-inconsistency-denver', noBuffering, (req, res, next) => {
+  if (denverInOutCtrl && denverInOutCtrl.getDenverInOutInconsistency) {
+    return denverInOutCtrl.getDenverInOutInconsistency(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver in/out controller not available' });
+});
+app.get('/api/rejections', noBuffering, (req, res, next) => {
+  if (denverRejectionsCtrl && denverRejectionsCtrl.getRejections) {
+    return denverRejectionsCtrl.getRejections(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver rejections controller not available' });
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Check below each file carefully and debug issue if backend is look good then we debug frontend line by line alos 
 
 

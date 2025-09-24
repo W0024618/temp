@@ -1,3 +1,165 @@
+// server.js
+require('dotenv').config();
+console.log('▶︎ Loading:', __filename);
+console.log('▶︎ CWD:', process.cwd());
+
+const express = require('express');
+const cors    = require('cors');
+const path    = require('path');
+
+// --- Guarded controller imports ---
+// Pune (core) controller
+let liveCtrl = null;
+try {
+  liveCtrl = require('./controllers/liveOccupancyController');
+} catch (e) {
+  console.error('Failed to load liveOccupancyController:', e && e.stack ? e.stack : e);
+  liveCtrl = null;
+}
+
+// Optional Denver controllers — load them safely (server still starts if they fail)
+let denverLiveCtrl = null;
+try { denverLiveCtrl = require('./controllers/denverLiveOccupancyController'); } catch (e) {
+  console.warn('denverLiveOccupancyController not loaded:', e && e.message ? e.message : e);
+}
+let denverInOutCtrl = null;
+try { denverInOutCtrl = require('./controllers/denverInOutInconsistencyController'); } catch (e) {
+  console.warn('denverInOutInconsistencyController not loaded:', e && e.message ? e.message : e);
+}
+let denverRejectionsCtrl = null;
+try { denverRejectionsCtrl = require('./controllers/denverRejection'); } catch (e) {
+  console.warn('denverRejection controller not loaded:', e && e.message ? e.message : e);
+}
+
+// --- Global process handlers (already good to have) ---
+process.on('unhandledRejection', (reason, p) => {
+  console.error('❌ Unhandled Rejection at:', p, 'reason:', reason && reason.stack ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught exception:', err && err.stack ? err.stack : err);
+});
+
+// --- Routes that always exist (employeeRoutes may be optional in your project) ---
+let employeeRoutes = null;
+try {
+  employeeRoutes = require('./routes/employeeRoutes');
+} catch (e) {
+  console.warn('employeeRoutes not loaded:', e && e.message ? e.message : e);
+  employeeRoutes = null;
+}
+
+// --- Create app (must come before route registrations) ---
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Log every incoming request
+app.use((req, res, next) => {
+  console.log(`➡︎ ${req.method} ${req.url}`);
+  next();
+});
+
+// Sanity‐check
+app.get('/ping', (req, res) => res.send('pong'));
+
+// SSE no‐buffering helper
+const noBuffering = (req, res, next) => {
+  res.set('X-Accel-Buffering', 'no');
+  next();
+};
+
+// 1) Employee API (if available)
+if (employeeRoutes) {
+  app.use('/api/employees', employeeRoutes);
+} else {
+  // optional: return 501 for employees route if someone calls it
+  app.use('/api/employees', (req, res) => res.status(501).json({ error: 'Employees routes not available' }));
+}
+
+// 2) Pune live‐occupancy SSE (guarded)
+if (liveCtrl && typeof liveCtrl.getLiveOccupancy === 'function') {
+  app.get('/api/live-occupancy', noBuffering, liveCtrl.getLiveOccupancy);
+} else {
+  app.get('/api/live-occupancy', noBuffering, (req, res) => {
+    return res.status(500).json({ error: 'Pune live controller not available' });
+  });
+}
+
+// Pune snapshot endpoint
+if (liveCtrl && typeof liveCtrl.getPuneSnapshotAtDateTime === 'function') {
+  app.get('/api/occupancy-at-time-pune', noBuffering, liveCtrl.getPuneSnapshotAtDateTime);
+} else {
+  app.get('/api/occupancy-at-time-pune', noBuffering, (req, res) => {
+    return res.status(500).json({ error: 'Pune snapshot controller not available' });
+  });
+}
+
+// 3) Denver live‐occupancy SSE (guarded)
+app.get('/api/live-occupancy-denver', noBuffering, (req, res, next) => {
+  if (denverLiveCtrl && typeof denverLiveCtrl.getDenverLiveOccupancy === 'function') {
+    return denverLiveCtrl.getDenverLiveOccupancy(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver live occupancy controller not available' });
+});
+
+// Denver snapshot
+app.get('/api/occupancy-at-time-denver', noBuffering, (req, res, next) => {
+  if (denverLiveCtrl && typeof denverLiveCtrl.getDenverSnapshotAtDateTime === 'function') {
+    return denverLiveCtrl.getDenverSnapshotAtDateTime(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver snapshot controller not available' });
+});
+
+// Denver in/out
+app.get('/api/inout-inconsistency-denver', noBuffering, (req, res, next) => {
+  if (denverInOutCtrl && typeof denverInOutCtrl.getDenverInOutInconsistency === 'function') {
+    return denverInOutCtrl.getDenverInOutInconsistency(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver in/out controller not available' });
+});
+
+// Rejections
+app.get('/api/rejections', noBuffering, (req, res, next) => {
+  if (denverRejectionsCtrl && typeof denverRejectionsCtrl.getRejections === 'function') {
+    return denverRejectionsCtrl.getRejections(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver rejections controller not available' });
+});
+
+// Serve React build & health
+const buildPath = path.join(__dirname, '..', 'client', 'build');
+app.use(express.static(buildPath));
+app.get('/health', (req, res) => res.send('OK'));
+
+// 404 catcher
+app.use((req, res) => {
+  console.log(`⚠️  No route for ${req.method} ${req.url}`);
+  res.status(404).send(`Cannot ${req.method} ${req.url}`);
+});
+
+const PORT = process.env.PORT || 3010;
+app.listen(PORT, '0.0.0.0', () =>
+  console.log(`✔️  Server listening on http://0.0.0.0:${PORT}`)
+);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Check below Server js and console error details and fix the error message carefully..
 
 ▶︎ Loading: D:\DASHBOARD\swipeData\employee-ai-insights\server.js

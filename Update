@@ -1,3 +1,802 @@
+// server.js
+require('dotenv').config();
+const path = require('path');
+
+console.log('▶︎ Loading:', __filename);
+console.log('▶︎ CWD:', process.cwd());
+
+const express = require('express');
+const cors    = require('cors');
+
+// Helper to attempt require and log friendly message if missing:
+function tryRequire(p) {
+  try {
+    return require(p);
+  } catch (err) {
+    console.warn(`⚠️  Optional module not found: ${p} — ${err.code || err.message}`);
+    return null;
+  }
+}
+
+// Import controllers (optional ones are loaded safely)
+const liveOccupancyController = tryRequire('./controllers/liveOccupancyController');
+const denverLiveController    = tryRequire('./controllers/denverLiveOccupancyController');
+const denverInOutController   = tryRequire('./controllers/denverInOutInconsistencyController');
+const denverRejectionController = tryRequire('./controllers/denverRejection');
+
+// Employee routes (if present)
+const employeeRoutes = tryRequire('./routes/employeeRoutes');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Basic request logger
+app.use((req, res, next) => {
+  console.log(`➡︎ ${req.method} ${req.url}`);
+  next();
+});
+
+// Sanity endpoints
+app.get('/ping', (req, res) => res.send('pong'));
+app.get('/health', (req, res) => res.send('OK'));
+
+// SSE no-buffering helper
+const noBuffering = (req, res, next) => {
+  res.set('X-Accel-Buffering', 'no');
+  next();
+};
+
+// 1) Employee API (optional)
+if (employeeRoutes && employeeRoutes instanceof Object) {
+  app.use('/api/employees', employeeRoutes);
+  console.log('✔️  Mounted /api/employees routes');
+} else {
+  console.log('ℹ️  /api/employees route not mounted (employeeRoutes missing)');
+}
+
+// 2) Pune live occupancy SSE
+if (liveOccupancyController && typeof liveOccupancyController.getLiveOccupancy === 'function') {
+  app.get('/api/live-occupancy', noBuffering, liveOccupancyController.getLiveOccupancy);
+  console.log('✔️  Mounted /api/live-occupancy SSE');
+} else {
+  console.warn('⚠️  getLiveOccupancy handler missing — /api/live-occupancy not mounted');
+}
+
+// 3) Pune snapshot endpoint (occupancy-at-time)
+if (liveOccupancyController && typeof liveOccupancyController.getPuneSnapshotAtDateTime === 'function') {
+  app.get('/api/occupancy-at-time-pune', noBuffering, liveOccupancyController.getPuneSnapshotAtDateTime);
+  console.log('✔️  Mounted /api/occupancy-at-time-pune');
+} else {
+  console.warn('⚠️  getPuneSnapshotAtDateTime handler missing — /api/occupancy-at-time-pune not mounted');
+}
+
+// 4) Optional Denver controllers (mounted only if present)
+if (denverLiveController && typeof denverLiveController.getDenverLiveOccupancy === 'function') {
+  app.get('/api/live-occupancy-denver', noBuffering, denverLiveController.getDenverLiveOccupancy);
+  console.log('✔️  Mounted /api/live-occupancy-denver SSE');
+} else {
+  console.log('ℹ️  /api/live-occupancy-denver not mounted (optional)');
+}
+
+if (denverLiveController && typeof denverLiveController.getDenverSnapshotAtDateTime === 'function') {
+  app.get('/api/occupancy-at-time-denver', noBuffering, denverLiveController.getDenverSnapshotAtDateTime);
+  console.log('✔️  Mounted /api/occupancy-at-time-denver');
+} else {
+  console.log('ℹ️  /api/occupancy-at-time-denver not mounted (optional)');
+}
+
+if (denverInOutController && typeof denverInOutController.getDenverInOutInconsistency === 'function') {
+  app.get('/api/inout-inconsistency-denver', noBuffering, denverInOutController.getDenverInOutInconsistency);
+  console.log('✔️  Mounted /api/inout-inconsistency-denver');
+} else {
+  console.log('ℹ️  /api/inout-inconsistency-denver not mounted (optional)');
+}
+
+if (denverRejectionController && typeof denverRejectionController.getRejections === 'function') {
+  app.get('/api/rejections', noBuffering, denverRejectionController.getRejections);
+  console.log('✔️  Mounted /api/rejections');
+} else {
+  console.log('ℹ️  /api/rejections not mounted (optional)');
+}
+
+// Serve React build (if exists)
+const buildPath = path.join(__dirname, '..', 'client', 'build');
+app.use(express.static(buildPath));
+
+// 404 catcher
+app.use((req, res) => {
+  console.log(`⚠️  No route for ${req.method} ${req.url}`);
+  res.status(404).send(`Cannot ${req.method} ${req.url}`);
+});
+
+// Error handler (catch any unhandled)
+app.use((err, req, res, next) => {
+  console.error('Unhandled error in express:', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  } else {
+    try { res.end(); } catch (e) {}
+  }
+});
+
+const PORT = process.env.PORT || 3010;
+app.listen(PORT, '0.0.0.0', () =>
+  console.log(`✔️  Server listening on http://0.0.0.0:${PORT}`)
+);
+
+
+
+
+
+
+
+
+
+
+
+// controllers/liveOccupancyController.js
+const { DateTime }   = require('luxon');
+const { sql, getPool } = require('../config/db');
+
+const doorZoneMap    = require('../data/doorZoneMap');
+const zoneFloorMap   = require('../data/zoneFloorMap');
+
+const ertMembers = require('../data/puneErtMembers.json');
+
+// track which door→zone keys we've already warned on
+const warnedKeys = new Set();
+
+function getTodayString() {
+  return DateTime.now().setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+}
+
+function normalizeZoneKey(rawDoor, rawDir) {
+  let door = String(rawDoor || '').trim();
+  door = door.replace(/_[0-9A-F]{2}:[0-9A-F]{2}:[0-9A-F]{2}$/, '');
+  door = door.replace(/\s+/g, ' ').toUpperCase();
+  const dir = rawDir === 'InDirection' ? 'InDirection' : 'OutDirection';
+  return `${door}___${dir}`;
+}
+
+function normalizePersonName(raw) {
+  let n = String(raw || '').trim();
+  if (n.includes(',')) {
+    const [last, rest] = n.split(',', 2);
+    n = `${rest.trim()} ${last.trim()}`;
+  }
+  return n.toLowerCase();
+}
+
+function mapDoorToZone(rawDoor, rawDir) {
+  const key = normalizeZoneKey(rawDoor, rawDir);
+  const zone = doorZoneMap[key];
+
+  if (!zone) {
+    if (!warnedKeys.has(key)) {
+      console.warn('⛔ Unmapped door–direction key:', key);
+      warnedKeys.add(key);
+    }
+    return 'Unknown Zone';
+  }
+
+  return zone;
+}
+
+async function fetchNewEvents(since) {
+  const pool = await getPool();
+  const req  = pool.request();
+  // ensure `since` is a JS Date (mssql driver expects a Date object)
+  const sinceDate = (since instanceof Date) ? since : new Date(since);
+  req.input('since', sql.DateTime2, sinceDate);
+
+  const { recordset } = await req.query(`
+    WITH CombinedQuery AS (
+      SELECT
+       DATEADD(MINUTE,-1 *t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
+        t1.ObjectName1,
+        CASE
+          WHEN t3.Name IN ('Contractor','Terminated Contractor') THEN t2.Text12
+          ELSE CAST(t2.Int1 AS NVARCHAR)
+        END AS EmployeeID,
+        t1.ObjectIdentity1 AS PersonGUID,
+        t3.Name AS PersonnelType,
+        COALESCE(
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+          sc.value
+        ) AS CardNumber,
+        t5a.value AS AdmitCode,
+        t5d.value AS Direction,
+        t1.ObjectName2 AS Door
+      FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] t1
+      LEFT JOIN [ACVSCore].[Access].[Personnel]     t2 ON t1.ObjectIdentity1 = t2.GUID
+      LEFT JOIN [ACVSCore].[Access].[PersonnelType] t3 ON t2.PersonnelTypeId = t3.ObjectID
+      LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] t5a
+        ON t1.XmlGUID = t5a.GUID AND t5a.Name = 'AdmitCode'
+      LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] t5d
+        ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+      LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] t_xml
+        ON t1.XmlGUID = t_xml.GUID
+      LEFT JOIN (
+        SELECT GUID, value
+        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
+        WHERE Name IN ('Card','CHUID')
+      ) sc ON t1.XmlGUID = sc.GUID
+      WHERE
+        t1.MessageType     = 'CardAdmitted'
+        AND t1.PartitionName2 = 'APAC.Default'
+        AND DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) > @since
+    )
+    SELECT
+      LocaleMessageTime,
+      CONVERT(VARCHAR(10), LocaleMessageTime, 23) AS Dateonly,
+      CONVERT(VARCHAR(8) , LocaleMessageTime, 108) AS Swipe_Time,
+      EmployeeID,
+      PersonGUID,
+      ObjectName1,
+      PersonnelType,
+      CardNumber,
+      AdmitCode,
+      Direction,
+      Door
+    FROM CombinedQuery
+    ORDER BY LocaleMessageTime ASC;
+  `);
+
+  return recordset;
+}
+
+async function buildOccupancy(allEvents) {
+  const current      = {};
+  const uniquePeople = new Map();
+
+  for (const evt of allEvents) {
+    const {
+      EmployeeID, PersonGUID,
+      ObjectName1, PersonnelType,
+      CardNumber, Dateonly,
+      Swipe_Time, Direction, Door
+    } = evt;
+
+    const dedupKey = PersonGUID || EmployeeID || CardNumber || ObjectName1;
+    const zoneRaw  = mapDoorToZone(Door, Direction);
+
+    if (zoneRaw === 'Unknown Zone') {
+      continue;
+    }
+
+    const zoneLower = zoneRaw.toLowerCase();
+
+    if (Direction === 'OutDirection') {
+      if (zoneLower === 'out of office') {
+        uniquePeople.delete(dedupKey);
+        delete current[dedupKey];
+      } else {
+        uniquePeople.set(dedupKey, PersonnelType);
+        current[dedupKey] = {
+          Dateonly, Swipe_Time,
+          EmployeeID, ObjectName1, CardNumber,
+          PersonnelType,
+          zone: zoneRaw,
+          door: Door,
+          Direction
+        };
+      }
+      continue;
+    }
+
+    if (Direction === 'InDirection') {
+      uniquePeople.set(dedupKey, PersonnelType);
+      current[dedupKey] = {
+        Dateonly, Swipe_Time,
+        EmployeeID, ObjectName1, CardNumber,
+        PersonnelType,
+        zone: zoneRaw,
+        door: Door,
+        Direction
+      };
+      continue;
+    }
+
+    uniquePeople.delete(dedupKey);
+    delete current[dedupKey];
+  }
+
+  let employeeCount   = 0;
+  let contractorCount = 0;
+  for (const pt of uniquePeople.values()) {
+    if (['Employee','Terminated Personnel'].includes(pt)) employeeCount++;
+    else contractorCount++;
+  }
+
+  const zoneMap = {};
+  for (const emp of Object.values(current)) {
+    const zKey = emp.zone.toLowerCase();
+    if (zKey === 'out of office') continue;
+    zoneMap[emp.zone] = zoneMap[emp.zone] || [];
+    zoneMap[emp.zone].push(emp);
+  }
+
+  const zoneDetails = Object.fromEntries(
+    Object.entries(zoneMap).map(([zone, emps]) => {
+      const byType = emps.reduce((acc, e) => {
+        acc[e.PersonnelType] = (acc[e.PersonnelType]||0) + 1;
+        return acc;
+      }, {});
+      return [ zone, { total: emps.length, byPersonnelType: byType, employees: emps } ];
+    })
+  );
+
+  const floorMap = {};
+  for (const [zone, data] of Object.entries(zoneDetails)) {
+    const floor = zoneFloorMap[zone] || 'Unknown Floor';
+    floorMap[floor] = floorMap[floor] || { total: 0, byPersonnelType: {} };
+    floorMap[floor].total += data.total;
+    for (const [pt, c] of Object.entries(data.byPersonnelType)) {
+      floorMap[floor].byPersonnelType[pt] = (floorMap[floor].byPersonnelType[pt]||0) + c;
+    }
+  }
+
+  const ertStatus = Object.fromEntries(
+    Object.entries(ertMembers).map(([role, members]) => {
+      const list = members.map(m => {
+        const rawName = m.name || m.Name;
+        const expected = normalizePersonName(rawName);
+
+        const matchEvt = Object.values(current).find(e => {
+          return normalizePersonName(e.ObjectName1) === expected;
+        });
+
+        return {
+          ...m,
+          present: !!matchEvt,
+          zone:    matchEvt ? matchEvt.zone : null
+        };
+     });
+      return [ role, list ];
+    })
+  );
+
+  return {
+    asOf:             new Date().toISOString(),
+    summary:          Object.entries(zoneDetails).map(([z,d])=>({ zone: z, count: d.total })),
+    zoneBreakdown:    Object.entries(zoneDetails).map(([z,d])=>({ zone: z, ...d.byPersonnelType, total: d.total })),
+    floorBreakdown:   Object.entries(floorMap).map(([f,d])=>({ floor: f, ...d.byPersonnelType, total: d.total })),
+    details:          zoneMap,
+    personnelSummary: { employees: employeeCount, contractors: contractorCount },
+    ertStatus,
+    personnelBreakdown: (() => {
+      const map = new Map();
+      for (const pt of uniquePeople.values()) {
+        map.set(pt, (map.get(pt) || 0) + 1);
+      }
+      return Array.from(map, ([personnelType, count]) => ({ personnelType, count }));
+    })(),
+  };
+}
+
+function buildVisitedToday(allEvents, asOf) {
+  let today;
+  if (asOf) {
+    if (typeof asOf === 'string') {
+      today = asOf;
+    } else if (asOf instanceof Date) {
+      today = DateTime.fromJSDate(asOf, { zone: 'Asia/Kolkata' }).toFormat('yyyy-LL-dd');
+    } else if (asOf && typeof asOf.toFormat === 'function') {
+      today = asOf.setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+    } else {
+      today = DateTime.now().setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+    }
+  } else {
+    today = DateTime.now().setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+  }
+
+  const todayIns = allEvents.filter(evt => {
+    return (
+      evt.Direction === 'InDirection' &&
+      evt.Dateonly === today
+    );
+  });
+
+  const dedup = new Map();
+  for (const e of todayIns) {
+    const key = e.PersonGUID;
+    const prev = dedup.get(key);
+    if (!prev || e.LocaleMessageTime > prev.LocaleMessageTime) {
+      dedup.set(key, e);
+    }
+  }
+
+  const finalList = Array.from(dedup.values());
+
+  const employees = finalList.filter(e =>
+    !['Contractor','Terminated Contractor','Temp Badge','Visitor','Property Management']
+      .includes(e.PersonnelType)
+  ).length;
+  const contractors = finalList.length - employees;
+
+  return { employees, contractors, total: finalList.length };
+}
+
+/** Server-Sent-Events endpoint */
+exports.getLiveOccupancy = async (req, res) => {
+  try {
+    // Ensure DB pool ready
+    await getPool();
+
+    res.writeHead(200, {
+      'Content-Type':  'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection':    'keep-alive'
+    });
+    res.write('\n');
+
+    // Pull last 24h on startup so client gets an initial snapshot
+    let lastSeen = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const events = [];
+
+    const push = async () => {
+      try {
+        // Remove any events older than today (in Asia/Kolkata) — keep only today's stream
+        const todayKolkata = DateTime.now().setZone('Asia/Kolkata').toISODate();
+        for (let i = events.length - 1; i >= 0; i--) {
+          // Accept either Date or ISO string stored in LocaleMessageTime
+          let candidate = events[i].LocaleMessageTime;
+          if (!(candidate instanceof Date)) {
+            candidate = new Date(candidate);
+          }
+          const ts = DateTime.fromJSDate(candidate, { zone: 'utc' })
+                         .setZone('Asia/Kolkata')
+                         .toISODate();
+          if (ts !== todayKolkata) {
+            events.splice(i, 1);
+          }
+        }
+
+        // Fetch new events since lastSeen
+        const fresh = await fetchNewEvents(lastSeen);
+        if (fresh && fresh.length) {
+          // update lastSeen to the last event's LocaleMessageTime (converted to Date)
+          const last = fresh[fresh.length - 1].LocaleMessageTime;
+          lastSeen = (last instanceof Date) ? last : new Date(last);
+          events.push(...fresh);
+        }
+
+        // build occupancy + today counts
+        const occupancy  = await buildOccupancy(events);
+        const todayStats = buildVisitedToday(events);
+
+        occupancy.totalVisitedToday = todayStats.total;
+        occupancy.visitedToday      = {
+          employees:   todayStats.employees,
+          contractors: todayStats.contractors,
+          total:       todayStats.total
+        };
+
+        const sid = Date.now();
+        res.write(`id: ${sid}\n`);
+        res.write(`data: ${JSON.stringify(occupancy)}\n\n`);
+
+        if (typeof res.flush === 'function') res.flush();
+      } catch (err) {
+        // Log, but don't let a single push failure close the stream
+        console.error('🔴 [PUSH] error (will continue):', err && err.message ? err.message : err);
+      }
+    };
+
+    // initial push (send current state immediately)
+    await push();
+
+    // periodic push
+    const timer = setInterval(push, 2000);
+    req.on('close', () => {
+      clearInterval(timer);
+      try { res.end(); } catch (e) {}
+    });
+
+  } catch (err) {
+    console.error('Live occupancy SSE error (fatal):', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  }
+};
+
+// GET /api/occupancy-at-time-pune?date=YYYY-MM-DD&time=HH:MM[:SS]
+exports.getPuneSnapshotAtDateTime = async (req, res) => {
+  try {
+    const { date, time } = req.query;
+    if (!date || !time) {
+      return res.status(400).json({
+        error: 'missing query params: expected ?date=YYYY-MM-DD&time=HH:MM[:SS]'
+      });
+    }
+
+    const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!dateMatch) {
+      return res.status(400).json({ error: 'invalid "date" format; expected YYYY-MM-DD' });
+    }
+
+    const timeMatch = /^([0-1]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(time);
+    if (!timeMatch) {
+      return res.status(400).json({ error: 'invalid "time" format; expected HH:MM or HH:MM:SS' });
+    }
+
+    const year   = Number(dateMatch[1]);
+    const month  = Number(dateMatch[2]);
+    const day    = Number(dateMatch[3]);
+    const hour   = Number(timeMatch[1]);
+    const minute = Number(timeMatch[2]);
+    const second = timeMatch[3] ? Number(timeMatch[3]) : 0;
+
+    const atDt = DateTime.fromObject(
+      { year, month, day, hour, minute, second, millisecond: 0 },
+      { zone: 'Asia/Kolkata' }
+    );
+
+    if (!atDt.isValid) {
+      return res.status(400).json({ error: 'invalid date+time combination' });
+    }
+
+    const untilUtc = atDt.setZone('utc').toJSDate();
+
+    const pool = await getPool();
+    const reqDb = pool.request();
+    reqDb.input('until', sql.DateTime2, untilUtc);
+
+    const { recordset } = await reqDb.query(`
+      WITH CombinedQuery AS (
+        SELECT
+          t1.MessageUTC,   -- always UTC
+          t1.ObjectName1,
+          CASE
+            WHEN t3.Name IN ('Contractor','Terminated Contractor') THEN t2.Text12
+            ELSE CAST(t2.Int1 AS NVARCHAR)
+          END AS EmployeeID,
+          t1.ObjectIdentity1 AS PersonGUID,
+          t3.Name AS PersonnelType,
+          COALESCE(
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+            sc.value
+          ) AS CardNumber,
+          t5d.value AS Direction,
+          t1.ObjectName2 AS Door
+        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] t1
+        LEFT JOIN [ACVSCore].[Access].[Personnel]     t2 ON t1.ObjectIdentity1 = t2.GUID
+        LEFT JOIN [ACVSCore].[Access].[PersonnelType] t3 ON t2.PersonnelTypeId = t3.ObjectID
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] t5d
+          ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] t_xml
+          ON t1.XmlGUID = t_xml.GUID
+        LEFT JOIN (
+          SELECT GUID, value
+          FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
+          WHERE Name IN ('Card','CHUID')
+        ) sc ON t1.XmlGUID = sc.GUID
+        WHERE
+          t1.MessageType = 'CardAdmitted'
+          AND t1.PartitionName2 = 'APAC.Default'
+          AND t1.MessageUTC <= @until
+          AND DATEADD(HOUR, -24, @until) < t1.MessageUTC
+      )
+      SELECT *
+      FROM CombinedQuery
+      ORDER BY MessageUTC ASC;
+    `);
+
+    const events = recordset.map(e => {
+      const local = DateTime.fromJSDate(e.MessageUTC, { zone: 'utc' }).setZone('Asia/Kolkata');
+      return {
+        ...e,
+        LocaleMessageTime: local.toISO(),
+        Dateonly: local.toFormat('yyyy-LL-dd'),
+        Swipe_Time: local.toFormat('HH:mm:ss'),
+      };
+    });
+
+    const targetDate = atDt.toFormat('yyyy-LL-dd');
+    const filtered = events.filter(e => e.Dateonly === targetDate);
+
+    const occupancy = await buildOccupancy(filtered);
+    const visitedStats = buildVisitedToday(filtered, atDt);
+
+    occupancy.asOfLocal = atDt.toISO();
+    occupancy.asOfUTC   = `${date}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:${String(second).padStart(2,'0')}Z`;
+
+    occupancy.totalVisitedToday = visitedStats.total;
+    occupancy.visitedToday = visitedStats;
+
+    return res.json(occupancy);
+  } catch (err) {
+    console.error('getPuneSnapshotAtDateTime error:', err);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+// Monthly summary (unchanged but left in controller)
+exports.getMonthlySummary = async (req, res) => {
+  try {
+    const { month } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'invalid "month" format; expected YYYY-MM' });
+    }
+
+    const [year, monthNum] = month.split('-').map(Number);
+
+    const start = DateTime.fromObject({ year, month: monthNum, day: 1 }, { zone: 'Asia/Kolkata' });
+    const end = start.endOf('month');
+
+    const startUtc = start.setZone('utc').toJSDate();
+    const endUtc   = end.setZone('utc').toJSDate();
+
+    const pool = await getPool();
+    const reqDb = pool.request();
+    reqDb.input('start', sql.DateTime2, startUtc);
+    reqDb.input('end', sql.DateTime2, endUtc);
+
+    const { recordset } = await reqDb.query(`
+      SELECT
+        t1.MessageUTC,
+        t1.ObjectName1,  -- Person name
+        CASE
+          WHEN t3.Name IN ('Contractor','Terminated Contractor') THEN t2.Text12
+          ELSE CAST(t2.Int1 AS NVARCHAR)
+        END AS EmployeeID,
+        t1.ObjectIdentity1 AS PersonGUID,
+        t3.Name AS PersonnelType,
+        t5d.value AS Direction,
+        t1.ObjectName2 AS Door
+      FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] t1
+      LEFT JOIN [ACVSCore].[Access].[Personnel]     t2 ON t1.ObjectIdentity1 = t2.GUID
+      LEFT JOIN [ACVSCore].[Access].[PersonnelType] t3 ON t2.PersonnelTypeId = t3.ObjectID
+      LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] t5d
+        ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+      WHERE
+        t1.MessageType = 'CardAdmitted'
+        AND t1.PartitionName2 = 'APAC.Default'
+        AND t1.MessageUTC BETWEEN @start AND @end
+      ORDER BY t1.MessageUTC ASC;
+    `);
+
+    const events = recordset.map(e => {
+      const local = DateTime.fromJSDate(e.MessageUTC, { zone: 'utc' }).setZone('Asia/Kolkata');
+      return {
+        ...e,
+        LocaleMessageTime: local.toJSDate(),
+        Dateonly: local.toFormat('yyyy-LL-dd'),
+        Swipe_Time: local.toFormat('HH:mm:ss'),
+      };
+    });
+
+    const allDates = [];
+    let cursor = start;
+    while (cursor <= end) {
+      allDates.push(cursor.toFormat('yyyy-LL-dd'));
+      cursor = cursor.plus({ days: 1 });
+    }
+
+    const byDay = new Map();
+    for (const evt of events) {
+      if (!byDay.has(evt.Dateonly)) byDay.set(evt.Dateonly, []);
+      byDay.get(evt.Dateonly).push(evt);
+    }
+
+    const dailySummaries = [];
+    const peakOccupancy = [];
+    const visitCounter = new Map();
+    const presenceByPerson = new Map();
+
+    for (const [dateKey, dayEvents] of byDay.entries()) {
+      const uniquePeople = new Set(dayEvents.map(e => e.PersonGUID));
+      dailySummaries.push({ date: dateKey, total: uniquePeople.size });
+
+      let currentCount = 0;
+      let maxCount = 0;
+      for (const e of dayEvents) {
+        if (e.Direction === 'InDirection') currentCount++;
+        else if (e.Direction === 'OutDirection') currentCount = Math.max(0, currentCount - 1);
+        if (currentCount > maxCount) maxCount = currentCount;
+      }
+      peakOccupancy.push({ date: dateKey, peak: maxCount });
+
+      for (const e of dayEvents) {
+        if (e.Direction === 'InDirection') {
+          const key = e.PersonGUID || e.EmployeeID || e.ObjectName1;
+          if (!visitCounter.has(key)) {
+            visitCounter.set(key, {
+              count: 0,
+              employeeId: e.EmployeeID,
+              name: e.ObjectName1,
+              personnelType: e.PersonnelType
+            });
+          }
+          visitCounter.get(key).count++;
+
+          if (!presenceByPerson.has(key)) {
+            presenceByPerson.set(key, {
+              employeeId: e.EmployeeID,
+              name: e.ObjectName1,
+              personnelType: e.PersonnelType,
+              days: new Set()
+            });
+          }
+          presenceByPerson.get(key).days.add(dateKey);
+        }
+      }
+    }
+
+    const avgDailyHeadcount =
+      dailySummaries.reduce((sum, d) => sum + d.total, 0) / dailySummaries.length || 0;
+
+    const top10 = Array.from(visitCounter.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map(v => ({
+        employeeId: v.employeeId,
+        name: v.name,
+        personnelType: v.personnelType,
+        visits: v.count
+      }));
+
+    const attendanceSheet = Array.from(presenceByPerson.values()).map(p => {
+      const daily = {};
+      let presentCount = 0;
+
+      for (const d of allDates) {
+        if (p.days.has(d)) {
+          daily[d] = "P";
+          presentCount++;
+        } else {
+          daily[d] = "A";
+        }
+      }
+
+      return {
+        employeeId: p.employeeId,
+        name: p.name,
+        personnelType: p.personnelType,
+        ...daily,
+        daysPresent: presentCount,
+        daysAbsent: allDates.length - presentCount,
+        attendancePercent: ((presentCount / allDates.length) * 100).toFixed(1) + "%"
+      };
+    });
+
+    return res.json({
+      month,
+      avgDailyHeadcount: Math.round(avgDailyHeadcount),
+      peakOccupancy,
+      top10Visitors: top10,
+      attendanceSheet
+    });
+
+  } catch (err) {
+    console.error('getMonthlySummary error:', err);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Beacause When i http://10.199.22.57:3010/api/live-occupancy check this API on browser We dont get any output 
 so once check each below file line by line carefully..
 

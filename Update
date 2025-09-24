@@ -1,3 +1,21 @@
+Check below App.js and Console details and fix the issue carefully 
+our backend is running on 3010 port 
+server ip is 10.199.22.57
+
+react-dom-client.development.js:24867 Download the React DevTools for a better development experience: https://react.dev/link/react-devtools
+react-dom-client.development.js:3077 Received `true` for a non-boolean attribute `jsx`.
+
+If you want to write it to the DOM, pass a string instead: jsx="true" or jsx={value.toString()}.
+validateProperty @ react-dom-client.development.js:3077
+deprecations.ts:9 ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+warnOnce @ deprecations.ts:9
+deprecations.ts:9 ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+warnOnce @ deprecations.ts:9
+App.js:340 [SSE] error EventisTrusted: truebubbles: falsecancelBubble: falsecancelable: falsecomposed: falsecurrentTarget: EventSource {url: 'http://localhost:5000/api/live-occupancy', withCredentials: false, readyState: 2, onopen: null, onmessage: ƒ, …}defaultPrevented: falseeventPhase: 0returnValue: truesrcElement: EventSource {url: 'http://localhost:5000/api/live-occupancy', withCredentials: false, readyState: 2, onopen: null, onmessage: ƒ, …}target: EventSource {url: 'http://localhost:5000/api/live-occupancy', withCredentials: false, readyState: 2, onopen: null, onmessage: ƒ, …}timeStamp: 2774.5type: "error"[[Prototype]]: Event
+es.onerror @ App.js:340
+localhost:5000/api/live-occupancy:1  Failed to load resource: net::ERR_CONNECTION_REFUSED
+
+
 
 
 

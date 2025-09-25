@@ -1,3 +1,224 @@
+// controllers/denverRejection.js
+const { denver } = require("../config/siteConfig");
+const doorFloorMap = require("../data/denverDoorFloorMap");
+const normalizeKey = require("../data/normalizeKey");
+
+// helper: regex fallback to extract floor number from Door string
+function extractFloorFromDoor(door) {
+  if (!door) return "Unknown";
+  // allow 1 or 2 digits after HQ.
+  const match = door.match(/HQ\.\s*(\d{1,2})\./i);
+  if (match) {
+    return `Floor ${parseInt(match[1], 10)}`;
+  }
+  return "Unknown";
+}
+
+async function getRejections(req, res) {
+  try {
+    const pool = await denver.poolPromise;
+
+    const query = `
+      WITH CombinedQuery AS (
+        SELECT
+          DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
+          t2.Int1      As EmployeeID,
+          t1.ObjectName1      AS ObjectName1,
+          t1.ObjectName2      AS Door,
+          t1.PartitionName2   AS PartitionName2,
+          COALESCE(
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+            sc.value
+          )                    AS CardNumber,
+          t3.Name              AS PersonnelType,
+          t5_rej.value         AS RejectionType
+        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] AS t1
+        LEFT JOIN [ACVSCore].[Access].[Personnel] AS t2
+          ON t1.ObjectIdentity1 = t2.GUID
+        LEFT JOIN [ACVSCore].[Access].[PersonnelType] AS t3
+          ON t2.PersonnelTypeId = t3.ObjectID
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] AS t_xml
+          ON t1.XmlGUID = t_xml.GUID
+        LEFT JOIN (
+          SELECT GUID, value
+          FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
+          WHERE Name IN ('Card','CHUID')
+        ) AS sc
+          ON t1.XmlGUID = sc.GUID
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] AS t5_rej
+          ON t1.XmlGUID = t5_rej.GUID AND t5_rej.Name = 'RejectCode'
+        WHERE
+          t1.MessageType = 'CardRejected'
+          AND t1.PartitionName2 = 'US.CO.OBS'
+          AND CONVERT(DATE,
+               DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC)
+              ) >= DATEADD(DAY, -7, CONVERT(DATE, GETDATE()))
+      )
+      SELECT
+        -- return ISO datetime as string, plus explicit date & time strings
+        CONVERT(VARCHAR(33), LocaleMessageTime, 126) AS LocaleMessageTime,
+        CONVERT(VARCHAR(10), LocaleMessageTime, 23)  AS DateOnly,   -- YYYY-MM-DD
+        CONVERT(VARCHAR(8),  LocaleMessageTime, 108) AS SwipeTime,   -- HH:MM:SS
+        EmployeeID,
+        ObjectName1,
+        CardNumber,
+        PersonnelType,
+        PartitionName2                     AS Location,
+        Door,
+        RejectionType
+      FROM CombinedQuery
+      ORDER BY LocaleMessageTime DESC;
+    `;
+
+    // use a request with a timeout (helps avoid hanging connections)
+    const req = pool.request();
+    req.timeout = 120000;
+    const result = await req.query(query);
+
+    // Post-process in JS
+    const details = result.recordset.map(r => {
+      let floor = "Unknown";
+
+      try {
+        // Door may not have "___" — split gracefully
+        const parts = (r.Door || "").split("___");
+        const doorRaw = parts[0] || "";
+        const dirRaw = parts[1] || "";
+        const normKey = normalizeKey(doorRaw || "", dirRaw || "");
+        const mapped = doorFloorMap[normKey];
+
+        if (mapped && mapped !== "Out of office") {
+          floor = mapped;
+        } else {
+          floor = extractFloorFromDoor(r.Door);
+        }
+      } catch (e) {
+        console.warn("Failed to resolve floor for door:", r.Door, e && e.message ? e.message : e);
+      }
+
+      // Ensure dates are strings in predictable format:
+      return {
+        ...r,
+        floor,
+        // r.DateOnly is already a 'YYYY-MM-DD' string from SQL now,
+        // r.SwipeTime is 'HH:MM:SS', r.LocaleMessageTime is ISO string
+        DateOnly: r.DateOnly,
+        SwipeTime: r.SwipeTime,
+        LocaleMessageTime: r.LocaleMessageTime
+      };
+    });
+
+    // Floor-wise rejection count (all days combined)
+    const summary = details.reduce((acc, row) => {
+      if (row.floor && row.floor !== "Unknown") {
+        if (!acc[row.floor]) acc[row.floor] = 0;
+        acc[row.floor]++;
+      }
+      return acc;
+    }, {});
+    const summaryArr = Object.entries(summary).map(([floor, rejectionCount]) => ({
+      floor,
+      rejectionCount,
+    }));
+
+    // Date + Floor-wise rejection count (dates are YYYY-MM-DD strings)
+    const dateWiseMap = {};
+    details.forEach(row => {
+      if (!row.floor || row.floor === "Unknown") return;
+      const date = (typeof row.DateOnly === 'string') ? row.DateOnly : String(row.DateOnly).slice(0, 10);
+      if (!dateWiseMap[date]) dateWiseMap[date] = {};
+      if (!dateWiseMap[date][row.floor]) dateWiseMap[date][row.floor] = 0;
+      dateWiseMap[date][row.floor]++;
+    });
+
+    const dateWiseArr = Object.entries(dateWiseMap).map(([date, floors]) => ({
+      date,
+      floors: Object.entries(floors).map(([floor, rejectionCount]) => ({
+        floor,
+        rejectionCount,
+      })),
+    }));
+
+    res.json({
+      summary: summaryArr,
+      dateWise: dateWiseArr,
+      details,
+    });
+  } catch (err) {
+    console.error("Error fetching rejection data:", err && err.stack ? err.stack : err);
+    res.status(500).send("Server Error");
+  }
+}
+
+module.exports = { getRejections };
+
+
+
+
+
+
+
+
+
+
+
+if (Array.isArray(payload.dateWise)) {
+  const dayObj = payload.dateWise.find(d => d.date === todayDenver);
+  if (dayObj && Array.isArray(dayObj.floors)) {
+    dayObj.floors.forEach(f => {
+      const key = normalizeFloorName(f.floor || '');
+      if (!key) return;
+      summaryMap[key] = Number(f.rejectionCount || 0);
+    });
+  }
+
+  if (Array.isArray(payload.details)) {
+    detailsToday = payload.details.filter(d => {
+      // Prefer DateOnly string from backend (YYYY-MM-DD)
+      if (d.DateOnly && typeof d.DateOnly === 'string') {
+        return d.DateOnly === todayDenver;
+      }
+      // Fallback: parse LocaleMessageTime (ISO string)
+      if (d.LocaleMessageTime && typeof d.LocaleMessageTime === 'string') {
+        try {
+          const dt = new Date(d.LocaleMessageTime);
+          const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+          return dtStr === todayDenver;
+        } catch (e) {
+          return String(d.LocaleMessageTime).slice(0, 10) === todayDenver;
+        }
+      }
+      return false;
+    });
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // controllers/denverRejection.js (patch)
 const { denver } = require("../config/siteConfig");
 const doorFloorMap = require("../data/denverDoorFloorMap");

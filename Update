@@ -1,3 +1,316 @@
+// controllers/denverRejection.js (patch)
+const { denver } = require("../config/siteConfig");
+const doorFloorMap = require("../data/denverDoorFloorMap");
+const normalizeKey = require("../data/normalizeKey");
+
+// helper: regex fallback to extract floor number from Door string
+function extractFloorFromDoor(door) {
+  if (!door) return "Unknown";
+  const match = door.match(/HQ\.\s*(\d{2})\./i);
+  if (match) {
+    return `Floor ${parseInt(match[1], 10)}`;
+  }
+  return "Unknown";
+}
+
+async function getRejections(req, res) {
+  try {
+    const pool = await denver.poolPromise;
+    if (!pool) return res.status(500).send("DB connection unavailable");
+
+    const query = `
+      WITH CombinedQuery AS (
+        SELECT
+          DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
+          t2.Int1      As EmployeeID,
+          t1.ObjectName1      AS ObjectName1,
+          t1.ObjectName2      AS Door,
+          t1.PartitionName2   AS PartitionName2,
+          COALESCE(
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+            sc.value
+          )                    AS CardNumber,
+          t3.Name              AS PersonnelType,
+          t5_rej.value         AS RejectionType
+        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] AS t1
+        LEFT JOIN [ACVSCore].[Access].[Personnel] AS t2
+          ON t1.ObjectIdentity1 = t2.GUID
+        LEFT JOIN [ACVSCore].[Access].[PersonnelType] AS t3
+          ON t2.PersonnelTypeId = t3.ObjectID
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] AS t_xml
+          ON t1.XmlGUID = t_xml.GUID
+        LEFT JOIN (
+          SELECT GUID, value
+          FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
+          WHERE Name IN ('Card','CHUID')
+        ) AS sc
+          ON t1.XmlGUID = sc.GUID
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] AS t5_rej
+          ON t1.XmlGUID = t5_rej.GUID AND t5_rej.Name = 'RejectCode'
+        WHERE
+          t1.MessageType = 'CardRejected'
+          AND t1.PartitionName2 = 'US.CO.OBS'
+          AND CONVERT(DATE,
+               DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC)
+              ) >= DATEADD(DAY, -7, CONVERT(DATE, GETDATE()))
+      )
+      SELECT
+        LocaleMessageTime,
+        CONVERT(date, LocaleMessageTime)    AS DateOnly,
+        CONVERT(time(0), LocaleMessageTime) AS SwipeTime,
+        EmployeeID,
+        ObjectName1,
+        CardNumber,
+        PersonnelType,
+        PartitionName2                     AS Location,
+        Door,
+        RejectionType
+      FROM CombinedQuery
+      ORDER BY LocaleMessageTime DESC;
+    `;
+
+    // set a reasonable request timeout so a single slow query doesn't hang a connection
+    const dbReq = pool.request();
+    dbReq.timeout = 120000; // 2 minutes
+    const result = await dbReq.query(query);
+
+    // Post-process in JS: normalize floor and produce deterministic date strings (Denver local)
+    const details = result.recordset.map(r => {
+      let floor = "Unknown";
+
+      try {
+        const doorValue = (r.Door || '').toString().trim();
+        const [doorRaw, dirRaw] = doorValue.split("___");
+        const normKey = normalizeKey((doorRaw || '').trim(), (dirRaw || '').trim());
+        const mapped = doorFloorMap[normKey];
+
+        if (mapped && mapped !== "Out of office") {
+          floor = mapped;
+        } else {
+          floor = extractFloorFromDoor(doorValue);
+        }
+
+        // build deterministic date strings (Denver local)
+        let localeIso = null;
+        let dateOnlyLocal = null;
+        let swipeTimeLocal = null;
+
+        if (r.LocaleMessageTime) {
+          // r.LocaleMessageTime is a JS Date (from mssql)
+          const dt = new Date(r.LocaleMessageTime);
+          localeIso = dt.toISOString();
+          dateOnlyLocal = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' }); // YYYY-MM-DD
+          swipeTimeLocal = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
+        } else if (r.DateOnly) {
+          const dt = new Date(r.DateOnly);
+          dateOnlyLocal = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+        }
+
+        return {
+          ...r,
+          Door: (r.Door || '').toString(),
+          floor,
+          DateOnlyLocal: dateOnlyLocal,         // 'YYYY-MM-DD'
+          LocaleMessageTimeISO: localeIso,     // ISO string in UTC
+          SwipeTimeLocal: swipeTimeLocal      // 'HH:mm:ss' local
+        };
+      } catch (e) {
+        console.warn("Failed to resolve floor/date for door:", r.Door, e && e.message);
+        return {
+          ...r,
+          floor: "Unknown",
+          DateOnlyLocal: null,
+          LocaleMessageTimeISO: null,
+          SwipeTimeLocal: null
+        };
+      }
+    });
+
+    // Floor-wise rejection count (all days combined)
+    const summary = details.reduce((acc, row) => {
+      if (row.floor && row.floor !== "Unknown") {
+        if (!acc[row.floor]) acc[row.floor] = 0;
+        acc[row.floor]++;
+      }
+      return acc;
+    }, {});
+    const summaryArr = Object.entries(summary).map(([floor, rejectionCount]) => ({
+      floor,
+      rejectionCount,
+    }));
+
+    // Date + Floor-wise rejection count (use DateOnlyLocal if available)
+    const dateWiseMap = {};
+    details.forEach(row => {
+      if (!row.floor || row.floor === "Unknown") return;
+      const date = row.DateOnlyLocal
+        ? row.DateOnlyLocal
+        : (row.LocaleMessageTimeISO ? new Date(row.LocaleMessageTimeISO).toLocaleDateString('en-CA', { timeZone: 'America/Denver' }) : null);
+      if (!date) return;
+      if (!dateWiseMap[date]) dateWiseMap[date] = {};
+      if (!dateWiseMap[date][row.floor]) dateWiseMap[date][row.floor] = 0;
+      dateWiseMap[date][row.floor]++;
+    });
+
+    const dateWiseArr = Object.entries(dateWiseMap).map(([date, floors]) => ({
+      date,
+      floors: Object.entries(floors).map(([floor, rejectionCount]) => ({
+        floor,
+        rejectionCount,
+      })),
+    }));
+
+    // Return details + additional fields for deterministic client filtering
+    res.json({
+      summary: summaryArr,
+      dateWise: dateWiseArr,
+      details,
+    });
+  } catch (err) {
+    console.error("Error fetching rejection data:", err);
+    res.status(500).send("Server Error");
+  }
+}
+
+module.exports = { getRejections };
+
+
+
+
+
+
+
+
+
+
+
+
+
+// inside loadRejectionsTodayOnly() after payload retrieved
+
+// today in Denver (YYYY-MM-DD)
+const todayDenver = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+
+// collect today's details (flat)
+let detailsToday = [];
+const summaryMap = {};
+
+// Prefer backend-provided dateWise for counts
+if (Array.isArray(payload.dateWise)) {
+  const dayObj = payload.dateWise.find(d => d.date === todayDenver);
+  if (dayObj && Array.isArray(dayObj.floors)) {
+    dayObj.floors.forEach(f => {
+      const key = normalizeFloorName(f.floor || '');
+      if (!key) return;
+      summaryMap[key] = Number(f.rejectionCount || 0);
+    });
+  }
+
+  // details: prefer backend DateOnlyLocal or LocaleMessageTimeISO
+  if (Array.isArray(payload.details)) {
+    detailsToday = payload.details.filter(d => {
+      // prefer server-provided DateOnlyLocal
+      if (d.DateOnlyLocal) {
+        return d.DateOnlyLocal === todayDenver;
+      }
+      // fallback to ISO timestamp
+      if (d.LocaleMessageTimeISO) {
+        try {
+          const dt = new Date(d.LocaleMessageTimeISO);
+          const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+          return dtStr === todayDenver;
+        } catch (e) {
+          return false;
+        }
+      }
+      // legacy fallback: if DateOnly exists as string or object
+      if (d.DateOnly) {
+        try {
+          const dt = new Date(d.DateOnly);
+          const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+          return dtStr === todayDenver;
+        } catch (e) {
+          return false;
+        }
+      }
+      return false;
+    });
+  }
+} else {
+  // fallback compatibility code (unchanged)
+  if (Array.isArray(payload.details)) {
+    detailsToday = payload.details.filter(d => {
+      const raw = d.LocaleMessageTime || d.DateOnly || d.LocaleMessageTime;
+      if (!raw) return false;
+      try {
+        const dt = new Date(raw);
+        const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+        return dtStr === todayDenver;
+      } catch (e) {
+        return String(raw).slice(0, 10) === todayDenver;
+      }
+    });
+
+    detailsToday.forEach(d => {
+      const derived = deriveFloorFromRecord(d) || 'Unknown';
+      const key = normalizeFloorName(derived);
+      summaryMap[key] = (summaryMap[key] || 0) + 1;
+    });
+  }
+}
+
+
+
+
+
+
+
+
+
+
+const regex = new RegExp(`\\b${numMatch}\\b`);
+
+
+// match numbers with optional leading zeros: '01' or '1' etc.
+const regex = new RegExp(`\\b0*${numMatch}\\b`);
+
+
+
+
+
+if (r.DateOnlyLocal) {
+  localDate = r.DateOnlyLocal;
+  localTime = r.SwipeTimeLocal || r.SwipeTime || '';
+} else if (r.LocaleMessageTimeISO) {
+  const dt = new Date(r.LocaleMessageTimeISO);
+  localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+  localTime = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
+} else if (r.LocaleMessageTime) {
+  const dt = new Date(r.LocaleMessageTime);
+  localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+  localTime = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
+} else if (r.DateOnly) {
+  const dt = new Date(r.DateOnly);
+  localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+  localTime = r.SwipeTime || '';
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Check below Both file carefully our issue is 
 
 for Denver Floor 01  we have 2 rejection it alos display in table 

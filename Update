@@ -1,4 +1,27 @@
-▶︎ Loading: D:\DASHBOARD\swipeData\employee-ai-insights\server.js
+▶︎ 
+
+# kill the process that owns port 3010 (use the PID you observed)
+Stop-Process -Id 14120 -Force
+
+# (optional) verify no process listens on 3010
+netstat -ano | findstr ":3010"
+
+
+
+
+# from D:\DASHBOARD\swipeData\employee-ai-insights
+node server.js > .\server.log 2>&1
+# in a separate window, tail the log:
+Get-Content .\server.log -Wait -Tail 200
+
+
+
+
+
+
+
+
+Loading: D:\DASHBOARD\swipeData\employee-ai-insights\server.js
 ▶︎ CWD: D:\DASHBOARD\swipeData\employee-ai-insights
 employeeRoutes not loaded: argument handler must be a function
 ✔️  Server listening on http://0.0.0.0:3010

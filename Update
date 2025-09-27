@@ -1,3 +1,15 @@
+
+netstat -ano | findstr ":3010"
+# check node process
+Get-Process node | Select-Object Id,ProcessName,StartTime
+
+
+
+
+
+
+
+
 // client/src/App.js
 import React, { useEffect, useState, useRef } from 'react';
 import SummaryChart from './components/SummaryChart';

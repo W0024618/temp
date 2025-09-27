@@ -1,1416 +1,196 @@
-// controllers/denverRejection.js
-const { denver } = require("../config/siteConfig");
-const doorFloorMap = require("../data/denverDoorFloorMap");
-const normalizeKey = require("../data/normalizeKey");
 
-// helper: regex fallback to extract floor number from Door string
-function extractFloorFromDoor(door) {
-  if (!door) return "Unknown";
-  // allow 1 or 2 digits after HQ.
-  const match = door.match(/HQ\.\s*(\d{1,2})\./i);
-  if (match) {
-    return `Floor ${parseInt(match[1], 10)}`;
+
+
+// C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\config\db.js
+
+const sql    = require('mssql');
+const dotenv = require('dotenv');
+dotenv.config();
+
+const config = {
+  server:   process.env.DB_SERVER,
+  user:     process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
+  connectionTimeout: 30000,    // 30 s to establish
+  requestTimeout:    0,        // no timeout on individual queries
+  pool: {
+    max:                  100,
+    min:                   0,
+
+    // Use maximum 32-bit signed‐int (~24.8 days) so Node/tarn doesn't overflow
+    idleTimeoutMillis:    2147483647,
+    acquireTimeoutMillis: 2147483647
+  },
+  options: {
+    encrypt:               true,
+    trustServerCertificate: true
   }
-  return "Unknown";
-}
-
-async function getRejections(req, res) {
-  try {
-    const pool = await denver.poolPromise;
-
-    const query = `
-      WITH CombinedQuery AS (
-        SELECT
-          DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
-          t2.Int1      As EmployeeID,
-          t1.ObjectName1      AS ObjectName1,
-          t1.ObjectName2      AS Door,
-          t1.PartitionName2   AS PartitionName2,
-          COALESCE(
-            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
-            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
-            sc.value
-          )                    AS CardNumber,
-          t3.Name              AS PersonnelType,
-          t5_rej.value         AS RejectionType
-        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] AS t1
-        LEFT JOIN [ACVSCore].[Access].[Personnel] AS t2
-          ON t1.ObjectIdentity1 = t2.GUID
-        LEFT JOIN [ACVSCore].[Access].[PersonnelType] AS t3
-          ON t2.PersonnelTypeId = t3.ObjectID
-        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] AS t_xml
-          ON t1.XmlGUID = t_xml.GUID
-        LEFT JOIN (
-          SELECT GUID, value
-          FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
-          WHERE Name IN ('Card','CHUID')
-        ) AS sc
-          ON t1.XmlGUID = sc.GUID
-        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] AS t5_rej
-          ON t1.XmlGUID = t5_rej.GUID AND t5_rej.Name = 'RejectCode'
-        WHERE
-          t1.MessageType = 'CardRejected'
-          AND t1.PartitionName2 = 'US.CO.OBS'
-          AND CONVERT(DATE,
-               DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC)
-              ) >= DATEADD(DAY, -7, CONVERT(DATE, GETDATE()))
-      )
-      SELECT
-        -- return ISO datetime as string, plus explicit date & time strings
-        CONVERT(VARCHAR(33), LocaleMessageTime, 126) AS LocaleMessageTime,
-        CONVERT(VARCHAR(10), LocaleMessageTime, 23)  AS DateOnly,   -- YYYY-MM-DD
-        CONVERT(VARCHAR(8),  LocaleMessageTime, 108) AS SwipeTime,   -- HH:MM:SS
-        EmployeeID,
-        ObjectName1,
-        CardNumber,
-        PersonnelType,
-        PartitionName2                     AS Location,
-        Door,
-        RejectionType
-      FROM CombinedQuery
-      ORDER BY LocaleMessageTime DESC;
-    `;
-
-    // use a request with a timeout (helps avoid hanging connections)
-    const req = pool.request();
-    req.timeout = 120000;
-    const result = await req.query(query);
-
-    // Post-process in JS
-    const details = result.recordset.map(r => {
-      let floor = "Unknown";
-
-      try {
-        // Door may not have "___" — split gracefully
-        const parts = (r.Door || "").split("___");
-        const doorRaw = parts[0] || "";
-        const dirRaw = parts[1] || "";
-        const normKey = normalizeKey(doorRaw || "", dirRaw || "");
-        const mapped = doorFloorMap[normKey];
-
-        if (mapped && mapped !== "Out of office") {
-          floor = mapped;
-        } else {
-          floor = extractFloorFromDoor(r.Door);
-        }
-      } catch (e) {
-        console.warn("Failed to resolve floor for door:", r.Door, e && e.message ? e.message : e);
-      }
-
-      // Ensure dates are strings in predictable format:
-      return {
-        ...r,
-        floor,
-        // r.DateOnly is already a 'YYYY-MM-DD' string from SQL now,
-        // r.SwipeTime is 'HH:MM:SS', r.LocaleMessageTime is ISO string
-        DateOnly: r.DateOnly,
-        SwipeTime: r.SwipeTime,
-        LocaleMessageTime: r.LocaleMessageTime
-      };
-    });
-
-    // Floor-wise rejection count (all days combined)
-    const summary = details.reduce((acc, row) => {
-      if (row.floor && row.floor !== "Unknown") {
-        if (!acc[row.floor]) acc[row.floor] = 0;
-        acc[row.floor]++;
-      }
-      return acc;
-    }, {});
-    const summaryArr = Object.entries(summary).map(([floor, rejectionCount]) => ({
-      floor,
-      rejectionCount,
-    }));
-
-    // Date + Floor-wise rejection count (dates are YYYY-MM-DD strings)
-    const dateWiseMap = {};
-    details.forEach(row => {
-      if (!row.floor || row.floor === "Unknown") return;
-      const date = (typeof row.DateOnly === 'string') ? row.DateOnly : String(row.DateOnly).slice(0, 10);
-      if (!dateWiseMap[date]) dateWiseMap[date] = {};
-      if (!dateWiseMap[date][row.floor]) dateWiseMap[date][row.floor] = 0;
-      dateWiseMap[date][row.floor]++;
-    });
-
-    const dateWiseArr = Object.entries(dateWiseMap).map(([date, floors]) => ({
-      date,
-      floors: Object.entries(floors).map(([floor, rejectionCount]) => ({
-        floor,
-        rejectionCount,
-      })),
-    }));
-
-    res.json({
-      summary: summaryArr,
-      dateWise: dateWiseArr,
-      details,
-    });
-  } catch (err) {
-    console.error("Error fetching rejection data:", err && err.stack ? err.stack : err);
-    res.status(500).send("Server Error");
-  }
-}
-
-module.exports = { getRejections };
-
-
-
-
-
-
-
-
-
-
-
-if (Array.isArray(payload.dateWise)) {
-  const dayObj = payload.dateWise.find(d => d.date === todayDenver);
-  if (dayObj && Array.isArray(dayObj.floors)) {
-    dayObj.floors.forEach(f => {
-      const key = normalizeFloorName(f.floor || '');
-      if (!key) return;
-      summaryMap[key] = Number(f.rejectionCount || 0);
-    });
-  }
-
-  if (Array.isArray(payload.details)) {
-    detailsToday = payload.details.filter(d => {
-      // Prefer DateOnly string from backend (YYYY-MM-DD)
-      if (d.DateOnly && typeof d.DateOnly === 'string') {
-        return d.DateOnly === todayDenver;
-      }
-      // Fallback: parse LocaleMessageTime (ISO string)
-      if (d.LocaleMessageTime && typeof d.LocaleMessageTime === 'string') {
-        try {
-          const dt = new Date(d.LocaleMessageTime);
-          const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-          return dtStr === todayDenver;
-        } catch (e) {
-          return String(d.LocaleMessageTime).slice(0, 10) === todayDenver;
-        }
-      }
-      return false;
-    });
-  }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// controllers/denverRejection.js (patch)
-const { denver } = require("../config/siteConfig");
-const doorFloorMap = require("../data/denverDoorFloorMap");
-const normalizeKey = require("../data/normalizeKey");
-
-// helper: regex fallback to extract floor number from Door string
-function extractFloorFromDoor(door) {
-  if (!door) return "Unknown";
-  const match = door.match(/HQ\.\s*(\d{2})\./i);
-  if (match) {
-    return `Floor ${parseInt(match[1], 10)}`;
-  }
-  return "Unknown";
-}
-
-async function getRejections(req, res) {
-  try {
-    const pool = await denver.poolPromise;
-    if (!pool) return res.status(500).send("DB connection unavailable");
-
-    const query = `
-      WITH CombinedQuery AS (
-        SELECT
-          DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
-          t2.Int1      As EmployeeID,
-          t1.ObjectName1      AS ObjectName1,
-          t1.ObjectName2      AS Door,
-          t1.PartitionName2   AS PartitionName2,
-          COALESCE(
-            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
-            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
-            sc.value
-          )                    AS CardNumber,
-          t3.Name              AS PersonnelType,
-          t5_rej.value         AS RejectionType
-        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] AS t1
-        LEFT JOIN [ACVSCore].[Access].[Personnel] AS t2
-          ON t1.ObjectIdentity1 = t2.GUID
-        LEFT JOIN [ACVSCore].[Access].[PersonnelType] AS t3
-          ON t2.PersonnelTypeId = t3.ObjectID
-        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] AS t_xml
-          ON t1.XmlGUID = t_xml.GUID
-        LEFT JOIN (
-          SELECT GUID, value
-          FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
-          WHERE Name IN ('Card','CHUID')
-        ) AS sc
-          ON t1.XmlGUID = sc.GUID
-        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] AS t5_rej
-          ON t1.XmlGUID = t5_rej.GUID AND t5_rej.Name = 'RejectCode'
-        WHERE
-          t1.MessageType = 'CardRejected'
-          AND t1.PartitionName2 = 'US.CO.OBS'
-          AND CONVERT(DATE,
-               DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC)
-              ) >= DATEADD(DAY, -7, CONVERT(DATE, GETDATE()))
-      )
-      SELECT
-        LocaleMessageTime,
-        CONVERT(date, LocaleMessageTime)    AS DateOnly,
-        CONVERT(time(0), LocaleMessageTime) AS SwipeTime,
-        EmployeeID,
-        ObjectName1,
-        CardNumber,
-        PersonnelType,
-        PartitionName2                     AS Location,
-        Door,
-        RejectionType
-      FROM CombinedQuery
-      ORDER BY LocaleMessageTime DESC;
-    `;
-
-    // set a reasonable request timeout so a single slow query doesn't hang a connection
-    const dbReq = pool.request();
-    dbReq.timeout = 120000; // 2 minutes
-    const result = await dbReq.query(query);
-
-    // Post-process in JS: normalize floor and produce deterministic date strings (Denver local)
-    const details = result.recordset.map(r => {
-      let floor = "Unknown";
-
-      try {
-        const doorValue = (r.Door || '').toString().trim();
-        const [doorRaw, dirRaw] = doorValue.split("___");
-        const normKey = normalizeKey((doorRaw || '').trim(), (dirRaw || '').trim());
-        const mapped = doorFloorMap[normKey];
-
-        if (mapped && mapped !== "Out of office") {
-          floor = mapped;
-        } else {
-          floor = extractFloorFromDoor(doorValue);
-        }
-
-        // build deterministic date strings (Denver local)
-        let localeIso = null;
-        let dateOnlyLocal = null;
-        let swipeTimeLocal = null;
-
-        if (r.LocaleMessageTime) {
-          // r.LocaleMessageTime is a JS Date (from mssql)
-          const dt = new Date(r.LocaleMessageTime);
-          localeIso = dt.toISOString();
-          dateOnlyLocal = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' }); // YYYY-MM-DD
-          swipeTimeLocal = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
-        } else if (r.DateOnly) {
-          const dt = new Date(r.DateOnly);
-          dateOnlyLocal = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-        }
-
-        return {
-          ...r,
-          Door: (r.Door || '').toString(),
-          floor,
-          DateOnlyLocal: dateOnlyLocal,         // 'YYYY-MM-DD'
-          LocaleMessageTimeISO: localeIso,     // ISO string in UTC
-          SwipeTimeLocal: swipeTimeLocal      // 'HH:mm:ss' local
-        };
-      } catch (e) {
-        console.warn("Failed to resolve floor/date for door:", r.Door, e && e.message);
-        return {
-          ...r,
-          floor: "Unknown",
-          DateOnlyLocal: null,
-          LocaleMessageTimeISO: null,
-          SwipeTimeLocal: null
-        };
-      }
-    });
-
-    // Floor-wise rejection count (all days combined)
-    const summary = details.reduce((acc, row) => {
-      if (row.floor && row.floor !== "Unknown") {
-        if (!acc[row.floor]) acc[row.floor] = 0;
-        acc[row.floor]++;
-      }
-      return acc;
-    }, {});
-    const summaryArr = Object.entries(summary).map(([floor, rejectionCount]) => ({
-      floor,
-      rejectionCount,
-    }));
-
-    // Date + Floor-wise rejection count (use DateOnlyLocal if available)
-    const dateWiseMap = {};
-    details.forEach(row => {
-      if (!row.floor || row.floor === "Unknown") return;
-      const date = row.DateOnlyLocal
-        ? row.DateOnlyLocal
-        : (row.LocaleMessageTimeISO ? new Date(row.LocaleMessageTimeISO).toLocaleDateString('en-CA', { timeZone: 'America/Denver' }) : null);
-      if (!date) return;
-      if (!dateWiseMap[date]) dateWiseMap[date] = {};
-      if (!dateWiseMap[date][row.floor]) dateWiseMap[date][row.floor] = 0;
-      dateWiseMap[date][row.floor]++;
-    });
-
-    const dateWiseArr = Object.entries(dateWiseMap).map(([date, floors]) => ({
-      date,
-      floors: Object.entries(floors).map(([floor, rejectionCount]) => ({
-        floor,
-        rejectionCount,
-      })),
-    }));
-
-    // Return details + additional fields for deterministic client filtering
-    res.json({
-      summary: summaryArr,
-      dateWise: dateWiseArr,
-      details,
-    });
-  } catch (err) {
-    console.error("Error fetching rejection data:", err);
-    res.status(500).send("Server Error");
-  }
-}
-
-module.exports = { getRejections };
-
-
-
-
-
-
-
-
-
-
-
-
-
-// inside loadRejectionsTodayOnly() after payload retrieved
-
-// today in Denver (YYYY-MM-DD)
-const todayDenver = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-
-// collect today's details (flat)
-let detailsToday = [];
-const summaryMap = {};
-
-// Prefer backend-provided dateWise for counts
-if (Array.isArray(payload.dateWise)) {
-  const dayObj = payload.dateWise.find(d => d.date === todayDenver);
-  if (dayObj && Array.isArray(dayObj.floors)) {
-    dayObj.floors.forEach(f => {
-      const key = normalizeFloorName(f.floor || '');
-      if (!key) return;
-      summaryMap[key] = Number(f.rejectionCount || 0);
-    });
-  }
-
-  // details: prefer backend DateOnlyLocal or LocaleMessageTimeISO
-  if (Array.isArray(payload.details)) {
-    detailsToday = payload.details.filter(d => {
-      // prefer server-provided DateOnlyLocal
-      if (d.DateOnlyLocal) {
-        return d.DateOnlyLocal === todayDenver;
-      }
-      // fallback to ISO timestamp
-      if (d.LocaleMessageTimeISO) {
-        try {
-          const dt = new Date(d.LocaleMessageTimeISO);
-          const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-          return dtStr === todayDenver;
-        } catch (e) {
-          return false;
-        }
-      }
-      // legacy fallback: if DateOnly exists as string or object
-      if (d.DateOnly) {
-        try {
-          const dt = new Date(d.DateOnly);
-          const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-          return dtStr === todayDenver;
-        } catch (e) {
-          return false;
-        }
-      }
-      return false;
-    });
-  }
-} else {
-  // fallback compatibility code (unchanged)
-  if (Array.isArray(payload.details)) {
-    detailsToday = payload.details.filter(d => {
-      const raw = d.LocaleMessageTime || d.DateOnly || d.LocaleMessageTime;
-      if (!raw) return false;
-      try {
-        const dt = new Date(raw);
-        const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-        return dtStr === todayDenver;
-      } catch (e) {
-        return String(raw).slice(0, 10) === todayDenver;
-      }
-    });
-
-    detailsToday.forEach(d => {
-      const derived = deriveFloorFromRecord(d) || 'Unknown';
-      const key = normalizeFloorName(derived);
-      summaryMap[key] = (summaryMap[key] || 0) + 1;
-    });
-  }
-}
-
-
-
-
-
-
-
-
-
-
-const regex = new RegExp(`\\b${numMatch}\\b`);
-
-
-// match numbers with optional leading zeros: '01' or '1' etc.
-const regex = new RegExp(`\\b0*${numMatch}\\b`);
-
-
-
-
-
-if (r.DateOnlyLocal) {
-  localDate = r.DateOnlyLocal;
-  localTime = r.SwipeTimeLocal || r.SwipeTime || '';
-} else if (r.LocaleMessageTimeISO) {
-  const dt = new Date(r.LocaleMessageTimeISO);
-  localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-  localTime = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
-} else if (r.LocaleMessageTime) {
-  const dt = new Date(r.LocaleMessageTime);
-  localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-  localTime = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
-} else if (r.DateOnly) {
-  const dt = new Date(r.DateOnly);
-  localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-  localTime = r.SwipeTime || '';
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Check below Both file carefully our issue is 
-
-for Denver Floor 01  we have 2 rejection it alos display in table 
-but when click it display there is no reejection for today ..
-
-Sr. No.	Date	Time	Employee Name	Employee ID	Access Card No.	Rejection Type	Door Name	Location
-1	25-Sep-25	12:01:21 AM	DENVER, TEMP_DEN_026 26	0	613943	Expired	US.CO.HQ. 01. Focus Area West-IN	US.CO.OBS
-2	25-Sep-25	12:01:17 AM	DENVER, TEMP_DEN_026 26	0	613943	Expired	US.CO.HQ. 01. Focus Area West-IN	US.CO.OBS
-
-this are the rejection details when check manually so check both file line by line and fix the issue 
-
-
-// C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\controllers\denverRejection.js
-const { denver } = require("../config/siteConfig");
-const doorFloorMap = require("../data/denverDoorFloorMap");
-const normalizeKey = require("../data/normalizeKey");
-
-// helper: regex fallback to extract floor number from Door string
-function extractFloorFromDoor(door) {
-  if (!door) return "Unknown";
-  const match = door.match(/HQ\.\s*(\d{2})\./i);
-  if (match) {
-    return `Floor ${parseInt(match[1], 10)}`;
-  }
-  return "Unknown";
-}
-
-async function getRejections(req, res) {
-  try {
-    const pool = await denver.poolPromise;
-
-    const query = `
-      WITH CombinedQuery AS (
-        SELECT
-          DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
-          t2.Int1      As EmployeeID,
-          t1.ObjectName1      AS ObjectName1,
-          t1.ObjectName2      AS Door,
-          t1.PartitionName2   AS PartitionName2,
-          COALESCE(
-            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
-            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
-            sc.value
-          )                    AS CardNumber,
-          t3.Name              AS PersonnelType,
-          t5_rej.value         AS RejectionType
-        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] AS t1
-        LEFT JOIN [ACVSCore].[Access].[Personnel] AS t2
-          ON t1.ObjectIdentity1 = t2.GUID
-        LEFT JOIN [ACVSCore].[Access].[PersonnelType] AS t3
-          ON t2.PersonnelTypeId = t3.ObjectID
-        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] AS t_xml
-          ON t1.XmlGUID = t_xml.GUID
-        LEFT JOIN (
-          SELECT GUID, value
-          FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
-          WHERE Name IN ('Card','CHUID')
-        ) AS sc
-          ON t1.XmlGUID = sc.GUID
-        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] AS t5_rej
-          ON t1.XmlGUID = t5_rej.GUID AND t5_rej.Name = 'RejectCode'
-        WHERE
-          t1.MessageType = 'CardRejected'
-          AND t1.PartitionName2 = 'US.CO.OBS'
-          AND CONVERT(DATE,
-               DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC)
-              ) >= DATEADD(DAY, -7, CONVERT(DATE, GETDATE()))
-      )
-      SELECT
-        LocaleMessageTime,
-        CONVERT(date, LocaleMessageTime)    AS DateOnly,
-        CONVERT(time(0), LocaleMessageTime) AS SwipeTime,
-        EmployeeID,
-        ObjectName1,
-        CardNumber,
-        PersonnelType,
-        PartitionName2                     AS Location,
-        Door,
-        RejectionType
-      FROM CombinedQuery
-      ORDER BY LocaleMessageTime DESC;
-    `;
-
-    const result = await pool.request().query(query);
-
-    // Post-process in JS
-    const details = result.recordset.map(r => {
-      let floor = "Unknown";
-
-      try {
-        const [doorRaw, dirRaw] = (r.Door || "").split("___");
-        const normKey = normalizeKey(doorRaw || "", dirRaw || "");
-        const mapped = doorFloorMap[normKey];
-
-        if (mapped && mapped !== "Out of office") {
-          floor = mapped;
-        } else {
-          floor = extractFloorFromDoor(r.Door);
-        }
-      } catch (e) {
-        console.warn("Failed to resolve floor for door:", r.Door, e.message);
-      }
-
-      return { ...r, floor };
-    });
-
-    // Floor-wise rejection count (all days combined)
-    const summary = details.reduce((acc, row) => {
-      if (row.floor !== "Unknown") {
-        if (!acc[row.floor]) acc[row.floor] = 0;
-        acc[row.floor]++;
-      }
-      return acc;
-    }, {});
-    const summaryArr = Object.entries(summary).map(([floor, rejectionCount]) => ({
-      floor,
-      rejectionCount,
-    }));
-
-    // Date + Floor-wise rejection count
-    const dateWiseMap = {};
-    details.forEach(row => {
-      if (row.floor === "Unknown") return;
-      const date = row.DateOnly.toISOString().split("T")[0]; // yyyy-mm-dd
-      if (!dateWiseMap[date]) dateWiseMap[date] = {};
-      if (!dateWiseMap[date][row.floor]) dateWiseMap[date][row.floor] = 0;
-      dateWiseMap[date][row.floor]++;
-    });
-
-    const dateWiseArr = Object.entries(dateWiseMap).map(([date, floors]) => ({
-      date,
-      floors: Object.entries(floors).map(([floor, rejectionCount]) => ({
-        floor,
-        rejectionCount,
-      })),
-    }));
-
-    res.json({
-      summary: summaryArr,
-      dateWise: dateWiseArr,
-      details,
-    });
-  } catch (err) {
-    console.error("Error fetching rejection data:", err);
-    res.status(500).send("Server Error");
-  }
-}
-
-module.exports = { getRejections };
-
-
-
-
-
-
-
-
-// src/components/FloorInOutTable.jsx
-import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Table, Modal, OverlayTrigger, Tooltip, Button } from 'react-bootstrap';
-
-import * as XLSX from 'xlsx'
-
-// Accent palette (gold / yellow)
-const GOLD = '#FFC72C';
-const GOLD_DEEP = '#FFDD00';
-const BLACK_BG = '#0b0b0b';
-// const ROW_COLORS = [GOLD, '#C9A9A6', '#FFE680', '#FFF5EE', '#FFD11A', '#96DED1', '#FFEB99'];
-
-// small helpers for theme
-const headerStyle = { background: GOLD_DEEP, color: '#000', fontWeight: '700' };
-const modalHeaderStyle = { background: BLACK_BG, color: GOLD, borderBottom: `2px solid ${GOLD_DEEP}` };
-const footerBtnStyle = { background: GOLD_DEEP, borderColor: GOLD_DEEP, color: '#000' };
-
-
-// Accent palette
-const ROW_COLORS = [
-  '#FFC72C', '#C9A9A6', '#FFE680',
-  '#FFF5EE', '#FFD11A', '#96DED1', '#FFEB99',
-];
-
-// Security Employee IDs (hardcoded)
-const SECURITY_IDS = [
-  "W0023386", "W0027969", "62082475", "W0027913", "C676439", "W0026151", "W0026455", "W0028120", 
-].map(id => id.toUpperCase());
-
-const normalizeId = v => String(v || '').trim().toUpperCase();
-
-// normalize floor names so "Floor 01" == "Floor 1"
-const normalizeFloorName = (f) => {
-  if (!f && f !== 0) return '';
-  return String(f).replace(/^Floor\s0*/, 'Floor ').trim();
 };
 
-// Export helpers for rejections (creates a nicer Excel workbook with a small summary sheet)
-const mapRejectionForExport = (r) => {
-  let localDate = '';
-  let localTime = '';
-  try {
-    if (r.LocaleMessageTime) {
-      const dt = new Date(r.LocaleMessageTime);
-      localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-      localTime = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
-    } else if (r.DateOnly) {
-      localDate = (typeof r.DateOnly === 'string' ? r.DateOnly.slice(0, 10) : new Date(r.DateOnly).toISOString().slice(0, 10));
-      localTime = r.SwipeTime || '';
-    }
-  } catch (e) {
-    localDate = (r.DateOnly || '').slice(0, 10);
-    localTime = r.SwipeTime || '';
-  }
+let poolPromise = null;
 
-  return {
-    Date: localDate,
-    Time: localTime,
-    Name: r.ObjectName1 || '',
-    EmployeeID: r.EmployeeID || '',
-    CardNumber: r.CardNumber || '',
-    PersonnelType: r.PersonnelType || '',
-    Door: r.Door || r.Location || '',
-    RejectionType: r.RejectionType || '',
-    DerivedFloor: deriveFloorFromRecord(r) || ''
-  };
-};
+async function getPool(attempts = 10) {
+  if (poolPromise) return poolPromise;
 
-const exportRejectionsToExcel = (rows, fileName = 'rejections.xlsx') => {
-  if (!rows || rows.length === 0) return;
-  const mapped = rows.map(mapRejectionForExport);
+  poolPromise = (async () => {
+    try {
+      const pool = await sql.connect(config);
+      console.log('✅ MSSQL pool connected');
 
-  // main sheet
-  const ws = XLSX.utils.json_to_sheet(mapped, { header: ['Date', 'Time', 'Name', 'EmployeeID', 'CardNumber', 'PersonnelType', 'Door', 'RejectionType', 'DerivedFloor'] });
-
-  // set some column widths for a nicer look
-  ws['!cols'] = [
-    { wch: 6 },  // index column (we'll keep # when viewing)
-    { wch: 12 }, // Date
-    { wch: 10 }, // Time
-    { wch: 28 }, // Name
-    { wch: 14 }, // EmployeeID
-    { wch: 14 }, // CardNumber
-    { wch: 16 }, // PersonnelType
-    { wch: 48 }, // Door
-    { wch: 20 }, // RejectionType
-    { wch: 12 }  // DerivedFloor
-  ];
-
-  // Summary sheet with small metadata
-  const summary = [
-    { Key: 'Export Date', Value: new Date().toLocaleString('en-CA') },
-    { Key: 'Record Count', Value: mapped.length },
-    { Key: 'Generated By', Value: 'FloorInOutTable' }
-  ];
-  const wsSummary = XLSX.utils.json_to_sheet(summary);
-  wsSummary['!cols'] = [{ wch: 20 }, { wch: 30 }];
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Rejections');
-  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
-
-  // force download
-  XLSX.writeFile(wb, fileName);
-};
-
-// Try to extract floor number from Door/Location strings robustly
-function deriveFloorFromRecord(rec) {
-  // Prefer explicit floor field if present
-  if (rec.floor && String(rec.floor).trim()) return normalizeFloorName(rec.floor);
-
-  const door = String(rec.Door || rec.door || rec.Location || '').trim();
-
-  if (!door) return 'Unknown';
-
-  // Common patterns: "US.CO.HQ. 12. South ..." or "US.CO.HQ. 06" or "US.CO.HQ 12"
-  // Look for HQ[.]? <num>
-  const mHQ = door.match(/HQ[.\s]*\s*(\d{1,2})\b/i);
-  if (mHQ && mHQ[1]) return `Floor ${parseInt(mHQ[1], 10)}`;
-
-  // Sometimes the floor appears right after the site prefix (e.g. "US.CO.HQ 6")
-  const mSimple = door.match(/\b(\d{1,2})\b/);
-  if (mSimple && mSimple[1]) {
-    // extra guard: don't accidentally pick small numbers from serials like "11:01:0A"
-    // require that the matched number is followed by a dot, space, or end-of-string (typical in " 12." or " 12 ")
-    const idx = door.indexOf(mSimple[1]);
-    if (idx !== -1) {
-      const after = door[idx + mSimple[1].length] || '';
-      if (after === '' || /\s|\./.test(after)) {
-        return `Floor ${parseInt(mSimple[1], 10)}`;
-      }
-    }
-  }
-
-  // If Location contains 'Floor X'
-  const mFloorText = door.match(/Floor\s*(\d{1,2})/i);
-  if (mFloorText && mFloorText[1]) return `Floor ${parseInt(mFloorText[1], 10)}`;
-
-  return 'Unknown';
-}
-
-export default function FloorInOutTable({
-  data = [],
-  floorBreakdown = [],
-  floorInOutSummary = []
-
-}) {
-  const securitySet = useMemo(() => new Set(SECURITY_IDS), []);
-
-  // Security modal state
-  const [showSecurityModal, setShowSecurityModal] = useState(false);
-  const [selectedFloorSecurity, setSelectedFloorSecurity] = useState(null);
-  const [selectedPeopleSecurity, setSelectedPeopleSecurity] = useState([]);
-
-  // Rejection state (today only)
-  const [rejectionDetails, setRejectionDetails] = useState({}); // { normFloor -> [records...] }
-  const [rejectionSummaryMap, setRejectionSummaryMap] = useState({}); // { normFloor -> count }
-  const [rejectionAllDetailsToday, setRejectionAllDetailsToday] = useState([]); // flat array of today's details
-  const [rejectionsLoading, setRejectionsLoading] = useState(false);
-
-  // Modal for showing today's rejection list
-  const [showRejectionModal, setShowRejectionModal] = useState(false);
-  const [selectedRejectionFloor, setSelectedRejectionFloor] = useState(null);
-  const [selectedRejectionList, setSelectedRejectionList] = useState([]);
-
-  // NEW: modals for header-clicks (show ALL security across floors, show ALL rejections today)
-  const [showAllSecurityModal, setShowAllSecurityModal] = useState(false);
-  const [showAllRejectionsModal, setShowAllRejectionsModal] = useState(false);
-
-
-  // Helper: try to decide whether an occupant object represents someone currently "in office".
-  // Adjust this if your source uses different field names for presence.
-  function isPresent(o = {}) {
-    // explicit boolean flags that mean "out"
-    if (o.OutOfOffice === true) return false;
-    if (o.IsOut === true) return false;
-    if (o.IsOnLeave === true) return false;
-    if (o.Absent === true) return false;
-    if (o.OnLeave === true) return false;
-
-    // explicit presence flag
-    if (o.IsPresent === false) return false;
-    if (o.InOffice === false) return false;
-
-    // textual status (common)
-    const status = (o.Status || o.PersonnelStatus || o.WorkStatus || '').toString().toLowerCase();
-    if (status && /(out|absent|leave|vacation|remote|off|offsite|wfh|working from home)/.test(status)) return false;
-
-    // last direction fields (if last swipe direction indicates OUT)
-    const dir = (o.LastSwipeDirection || o.Direction || o.SwipeDirection || '').toString().toLowerCase();
-    if (dir && /(out|exit)/.test(dir)) return false;
-
-    // Location type: remote / home office
-    const workloc = (o.WorkLocation || o.LocationType || '').toString().toLowerCase();
-    if (workloc && /(remote|home|offsite|wfh)/.test(workloc)) return false;
-
-    // If nothing explicitly says "out", assume present (safer to show security if unsure).
-    return true;
-  }
-
-  const securityByFloor = useMemo(() => {
-    const byFloor = {};
-
-    (floorBreakdown || []).forEach(fb => {
-      const people = [];
-      (fb.occupants || []).forEach(o => {
-        const empId = normalizeId(o.EmployeeID);
-        if (!securitySet.has(empId)) return;
-        // Only count this occupant if they look "present"
-        if (!isPresent(o)) return;
-        people.push(o);
+      // attach pool-level error listener so we can reset and attempt reconnects
+      pool.on('error', err => {
+        console.error('❌ MSSQL pool error:', err);
+        // Reset promise so next getPool() tries to reconnect
+        poolPromise = null;
       });
-      if (people.length) {
-        byFloor[fb.floor] = (byFloor[fb.floor] || []).concat(people);
+
+      return pool;
+    } catch (err) {
+      console.error('❌ MSSQL pool connection failed:', err);
+      poolPromise = null;
+      if (attempts > 0) {
+        console.log(`⏳ Retrying MSSQL connect (${attempts} left)…`);
+        await new Promise(res => setTimeout(res, 3000));
+        return getPool(attempts - 1);
       }
-    });
-
-    // inOnlyPersons are assumed to be "in" by the existing upstream logic
-    (floorInOutSummary || []).forEach(f => {
-      (f.inOnlyPersons || []).forEach(pid => {
-        const empId = normalizeId(pid);
-        if (securitySet.has(empId)) {
-          byFloor[f.floor] = (byFloor[f.floor] || []).concat([
-            { EmployeeID: empId, ObjectName1: "(Unknown)", Swipe_Time: "—", Door: "—", PersonnelType: "—" }
-          ]);
-        }
-      });
-    });
-
-    return byFloor;
-  }, [floorBreakdown, floorInOutSummary, securitySet]);
-
-
-  // NEW: flattened security list (each item gets a floor property)
-  const securityFlat = useMemo(() => {
-    const arr = [];
-    Object.keys(securityByFloor || {}).forEach(f => {
-      (securityByFloor[f] || []).forEach(p => arr.push({ ...p, floor: f }));
-    });
-    return arr;
-  }, [securityByFloor]);
-
-  // --- fetch rejections and keep only today's (Denver) records ---
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadRejectionsTodayOnly() {
-      setRejectionsLoading(true);
-      try {
-        const res = await fetch('http://10.199.22.57:3010/api/rejections');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const payload = await res.json();
-
-        // today in Denver (YYYY-MM-DD)
-        const todayDenver = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-
-        // collect today's details (flat)
-        let detailsToday = [];
-        const summaryMap = {};
-
-        // Prefer backend dateWise (aggregates) for counts if available
-        if (Array.isArray(payload.dateWise)) {
-          const dayObj = payload.dateWise.find(d => d.date === todayDenver);
-          if (dayObj && Array.isArray(dayObj.floors)) {
-            dayObj.floors.forEach(f => {
-              const key = normalizeFloorName(f.floor || '');
-              if (!key) return;
-              summaryMap[key] = Number(f.rejectionCount || 0);
-            });
-          }
-          // build detailsToday from payload.details so we can populate modal content
-          if (Array.isArray(payload.details)) {
-            detailsToday = payload.details.filter(d => {
-              const raw = d.LocaleMessageTime || d.DateOnly || d.LocaleMessageTime;
-              if (!raw) return false;
-              try {
-                const dt = new Date(raw);
-                const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-                return dtStr === todayDenver;
-              } catch (e) {
-                return String(raw).slice(0, 10) === todayDenver;
-              }
-            });
-          }
-        } else {
-          // fallback: filter details for today and aggregate counts
-          if (Array.isArray(payload.details)) {
-            detailsToday = payload.details.filter(d => {
-              const raw = d.LocaleMessageTime || d.DateOnly || d.LocaleMessageTime;
-              if (!raw) return false;
-              try {
-                const dt = new Date(raw);
-                const dtStr = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-                return dtStr === todayDenver;
-              } catch (e) {
-                return String(raw).slice(0, 10) === todayDenver;
-              }
-            });
-
-            // derive floor per record and increment summary
-            detailsToday.forEach(d => {
-              const derived = deriveFloorFromRecord(d) || 'Unknown';
-              const key = normalizeFloorName(derived);
-              summaryMap[key] = (summaryMap[key] || 0) + 1;
-            });
-          }
-        }
-
-        // group detailsToday by normalized floor (derive floor if missing)
-        const detailsByFloor = {};
-        detailsToday.forEach(d => {
-          const derived = deriveFloorFromRecord(d) || 'Unknown';
-          const key = normalizeFloorName(derived) || 'Unknown';
-          detailsByFloor[key] = detailsByFloor[key] || [];
-          detailsByFloor[key].push(d);
-        });
-
-        if (!mounted) return;
-        setRejectionSummaryMap(summaryMap);
-        setRejectionDetails(detailsByFloor);
-        setRejectionAllDetailsToday(detailsToday);
-      } catch (err) {
-        console.error('Failed to load rejections:', err);
-        if (mounted) {
-          setRejectionSummaryMap({});
-          setRejectionDetails({});
-          setRejectionAllDetailsToday([]);
-        }
-      } finally {
-        if (mounted) setRejectionsLoading(false);
-      }
+      throw err;
     }
+  })();
 
-    loadRejectionsTodayOnly();
-    return () => { mounted = false; };
-  }, []);
+  // Global sql error: log but do not crash the process
+  sql.on('error', err => {
+    console.error('❌ MSSQL global error:', err);
+    // Consider resetting poolPromise only for fatal errors:
+    // poolPromise = null;
+  });
 
-  // Build sorted rows and attach securityCount & today's rejectionCount
-  const sorted = useMemo(() => {
-    const rows = (Array.isArray(data) ? data : []).map(({ floor, inSwipes, outSwipes }) => {
-      const normFloor = normalizeFloorName(floor);
-      return {
-        floor,
-        normFloor,
-        inSwipes: Number(inSwipes || 0),
-        outSwipes: Number(outSwipes || 0),
-        inconsistency: Number(inSwipes || 0) - Number(outSwipes || 0),
-        securityCount: (securityByFloor[floor] || []).length,
-        rejectionCount: rejectionSummaryMap[normFloor] || 0
-      };
-    });
-    return rows.sort((a, b) => b.inconsistency - a.inconsistency);
-  }, [data, securityByFloor, rejectionSummaryMap]);
-
-  const top = sorted[0];
-
-  const handleSecurityCellClick = (floor) => {
-    const people = securityByFloor[floor] || [];
-    if (people.length > 0) {
-      setSelectedFloorSecurity(floor);
-      setSelectedPeopleSecurity(people);
-      setShowSecurityModal(true);
-    }
-  };
-
-  // when user clicks the rejection cell, open modal and show today's details for that normalized floor
-  const handleRejectionCellClick = (normFloor, displayFloor) => {
-    let list = rejectionDetails[normFloor] || [];
-
-    // fallback: if grouped list empty but we have a count, try scanning flat details for the floor number
-    if ((!list || list.length === 0) && (rejectionSummaryMap[normFloor] || 0) > 0) {
-      const numMatch = (normFloor && normFloor.match(/\d+/)) ? normFloor.match(/\d+/)[0] : null;
-      if (numMatch && Array.isArray(rejectionAllDetailsToday)) {
-        const regex = new RegExp(`\\b${numMatch}\\b`);
-        list = rejectionAllDetailsToday.filter(d => {
-          const door = String(d.Door || d.door || d.Location || '');
-          return regex.test(door);
-        });
-      }
-    }
-
-    setSelectedRejectionFloor(displayFloor || normFloor);
-    setSelectedRejectionList(list || []);
-    setShowRejectionModal(true);
-  };
-
-  // NEW: header click handlers
-  const handleSecurityHeaderClick = () => {
-    if ((securityFlat || []).length > 0) setShowAllSecurityModal(true);
-  };
-
-  const handleRejectionHeaderClick = () => {
-    if ((rejectionAllDetailsToday || []).length > 0) setShowAllRejectionsModal(true);
-  };
-
-  // Tooltip content uses rejectionDetails (already filtered to today)
-  const renderRejectionTooltip = (floor) => {
-    const nf = normalizeFloorName(floor);
-    const byFloor = rejectionDetails[nf] || [];
-    if (!byFloor.length) return 'No rejections today';
-    const lines = [`Total today: ${byFloor.length}`, '', 'Recent:'];
-    byFloor.slice(0, 6).forEach(d => {
-      const date = d.LocaleMessageTime ? d.LocaleMessageTime.slice(0, 10) : (d.DateOnly ? (typeof d.DateOnly === 'string' ? d.DateOnly.slice(0, 10) : new Date(d.DateOnly).toISOString().slice(0, 10)) : '');
-      const time = d.SwipeTime || (d.LocaleMessageTime ? d.LocaleMessageTime.slice(11, 19) : '');
-      lines.push(`${date} ${time} — ${d.RejectionType || ''} — ${d.Door || d.Location || ''}`);
-    });
-    if (byFloor.length > 6) lines.push(`… +${byFloor.length - 6} more`);
-    return lines.join('\n');
-  };
-
-  return (
-    <>
-      <Card className="mb-4 shadow-sm" style={{ background: '#1a1a1a', border: '2px solid #FFC72C' }}>
-        <Card.Header className="text-center fw-bold" style={{ background: '#000', color: '#FFC72C' }}>
-          Floor In vs Out Swipe Summary (Rejections — Today)
-        </Card.Header>
-
-        <Card.Body style={{ height: 450, padding: '1rem', overflowY: 'auto' }}>
-          {top && (
-            <div className="mb-3" style={{ color: '#fff', fontSize: '1rem' }}>
-              Highest inconsistency:&nbsp;
-              <span style={{ color: '#FFC72C', fontWeight: 'bold' }}>{top.inconsistency}</span>
-              &nbsp;on&nbsp;
-              <span style={{ color: '#FFC72C', fontWeight: 'bold' }}>{top.floor}</span>
-            </div>
-          )}
-
-          <Table striped bordered hover size="sm" variant="dark" className="mb-0">
-            <thead>
-              <tr>
-                <th>Floor</th>
-                <th>In Swipes</th>
-                <th>Out Swipes</th>
-                <th>In − Out</th>
-                <th
-                  style={{ cursor: (securityFlat && securityFlat.length) ? 'pointer' : 'default', textDecoration: (securityFlat && securityFlat.length) ? 'underline' : 'none' }}
-                  onClick={handleSecurityHeaderClick}
-                  title={securityFlat && securityFlat.length ? `Show all security (${securityFlat.length})` : 'No security'}
-                >
-                  Security
-                </th>
-                <th
-                  style={{ cursor: (rejectionAllDetailsToday && rejectionAllDetailsToday.length) ? 'pointer' : 'default', textDecoration: (rejectionAllDetailsToday && rejectionAllDetailsToday.length) ? 'underline' : 'none' }}
-                  onClick={handleRejectionHeaderClick}
-                  title={rejectionAllDetailsToday && rejectionAllDetailsToday.length ? `Show all rejections today (${rejectionAllDetailsToday.length})` : 'No rejections today'}
-                >
-                  Rejection
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {sorted.map((row, idx) => (
-                <tr key={row.floor} style={{ backgroundColor: row.securityCount > 0 ? '#333300' : undefined }}>
-                  <td style={{ color: '#fff' }}>{row.floor}</td>
-                  <td style={{ color: ROW_COLORS[idx % ROW_COLORS.length] }}>{row.inSwipes}</td>
-                  <td style={{ color: ROW_COLORS[(idx + 1) % ROW_COLORS.length] }}>{row.outSwipes}</td>
-                  <td style={{ color: ROW_COLORS[(idx + 2) % ROW_COLORS.length], fontWeight: 'bold' }}>
-                    {row.inconsistency}
-                  </td>
-
-                  {/* Security cell - clickable only this cell */}
-
-                  <td
-                    style={{
-                      color: row.securityCount > 0 ? '#FFC72C' : '#aaa',
-                      fontWeight: row.securityCount > 0 ? 'bold' : 'normal',
-                      cursor: row.securityCount > 0 ? 'pointer' : 'default',
-                      textDecoration: row.securityCount > 0 ? 'underline' : 'none'
-                    }}
-                    onClick={() => { if (row.securityCount > 0) handleSecurityCellClick(row.floor); }}
-                  >
-                    {row.securityCount > 0 ? row.securityCount : ''}
-                  </td>
-
-
-                  {/* Rejection cell (today only) - clickable to open modal */}
-                  <td style={{
-                    color: row.rejectionCount > 0 ? '#FFCCCB' : '#aaa',
-                    fontWeight: row.rejectionCount > 0 ? 'bold' : 'normal',
-                    cursor: row.rejectionCount > 0 ? 'pointer' : 'default'
-                  }}>
-                    {row.rejectionCount > 0 ? (
-                      <OverlayTrigger
-                        placement="top"
-                        overlay={<Tooltip id={`rej-tip-${row.normFloor.replace(/\s+/g, '_')}`}>{renderRejectionTooltip(row.normFloor || row.floor)}</Tooltip>}
-                      >
-                        <span
-                          onClick={() => handleRejectionCellClick(row.normFloor, row.floor)}
-                          style={{ textDecoration: 'underline', display: 'inline-block' }}
-                        >
-                          {row.rejectionCount}
-                        </span>
-                      </OverlayTrigger>
-                    ) : 0}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        </Card.Body>
-      </Card>
-
-      {/* Security Modal */}
-      <Modal show={showSecurityModal} onHide={() => setShowSecurityModal(false)} size="lg" centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Security Occupants - {selectedFloorSecurity}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Table striped bordered hover size="sm">
-            <thead>
-              <tr>
-                <th>EmployeeID</th>
-                <th>Name</th>
-                <th>Swipe Time</th>
-                <th>Door</th>
-                <th>Type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedPeopleSecurity.map((p, idx) => (
-                <tr key={idx}>
-                  <td>{p.EmployeeID}</td>
-                  <td>{p.ObjectName1 || "(Unknown)"}</td>
-                  <td>{p.Swipe_Time || "—"}</td>
-                  <td>{p.Door || "—"}</td>
-                  <td>{p.PersonnelType || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        </Modal.Body>
-      </Modal>
-
-
-
-      {/* NEW: All Security Modal (header click) */}
-      <Modal show={showAllSecurityModal} onHide={() => setShowAllSecurityModal(false)} size="lg" centered>
-        <Modal.Header closeButton>
-          <Modal.Title style={{ textAlign: 'center' }}>All Security Occupants</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {(!securityFlat || securityFlat.length === 0) ? (
-            <div>No security occupants found</div>
-          ) : (
-            <Table striped bordered hover size="sm">
-              <thead >
-                <tr>
-                  <th>Sr.no</th>
-                  <th>Floor</th>
-                  <th>EmployeeID</th>
-                  <th>Name</th>
-                  <th>Swipe Time</th>
-                  <th>Door</th>
-                </tr>
-              </thead>
-              <tbody>
-                {securityFlat.map((p, i) => (
-                  <tr key={i}>
-                    <td>{i + 1}</td>
-                    <td>{p.floor}</td>
-                    <td>{p.EmployeeID}</td>
-                    <td>{p.ObjectName1 || '(Unknown)'}</td>
-                    <td>{p.Swipe_Time || '—'}</td>
-                    <td style={{ maxWidth: 240, wordBreak: 'break-word' }}>{p.Door || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowAllSecurityModal(false)}>Close</Button>
-        </Modal.Footer>
-      </Modal>
-
-
-
-      {/* Rejection details modal (today) */}
-      <Modal show={showRejectionModal} onHide={() => setShowRejectionModal(false)} size="lg" centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Rejections Today - {selectedRejectionFloor}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedRejectionList.length === 0 ? (
-            <div>No rejections recorded today for {selectedRejectionFloor}</div>
-          ) : (
-            <Table striped bordered hover size="sm">
-              <thead>
-                <tr>
-                  <th>Sr.no</th>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Name</th>
-                  <th>EmployeeID</th>
-                  <th>CardNumber</th>
-                  <th>PersonnelType</th>
-                  <th>Door</th>
-                  <th>RejectionType</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedRejectionList.map((r, i) => {
-                  let localDate = '';
-                  let localTime = '';
-                  try {
-                    if (r.LocaleMessageTime) {
-                      const dt = new Date(r.LocaleMessageTime);
-                      localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-                      localTime = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
-                    } else if (r.DateOnly) {
-                      localDate = (typeof r.DateOnly === 'string' ? r.DateOnly.slice(0, 10) : new Date(r.DateOnly).toISOString().slice(0, 10));
-                      localTime = r.SwipeTime || '';
-                    }
-                  } catch (e) {
-                    localDate = (r.DateOnly || '').slice(0, 10);
-                    localTime = r.SwipeTime || '';
-                  }
-
-                  return (
-                    <tr key={i}>
-                      <td>{i + 1}</td>
-                      <td>{localDate}</td>
-                      <td>{localTime}</td>
-                      <td>{r.ObjectName1}</td>
-                      <td>{r.EmployeeID}</td>
-                      <td>{r.CardNumber || '—'}</td>
-                      <td>{r.PersonnelType || '—'}</td>
-                      <td style={{ maxWidth: 280, wordBreak: 'break-word' }}>{r.Door || r.Location || '—'}</td>
-                      <td>{r.RejectionType || '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </Table>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            style={{ background: '#FFC72C', borderColor: '#FFC72C', color: '#000', fontWeight: 600 }}
-            onClick={() => exportRejectionsToExcel(selectedRejectionList, `rejections-${(selectedRejectionFloor || 'floor').replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 10)}.xlsx`)}
-          >
-            Export Excel
-          </Button>
-          <Button variant="secondary" onClick={() => setShowRejectionModal(false)}>Close</Button>
-        </Modal.Footer>
-      </Modal>
-
-
-
-      {/* NEW: All Rejections Modal (header click) */}
-      <Modal show={showAllRejectionsModal} onHide={() => setShowAllRejectionsModal(false)} size="lg" centered >
-        <Modal.Header closeButton>
-          <Modal.Title>All Rejections Today</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {(!rejectionAllDetailsToday || rejectionAllDetailsToday.length === 0) ? (
-            <div>No rejections recorded today</div>
-          ) : (
-            <Table striped bordered hover size="sm">
-              <thead>
-                <tr>
-                  <th>Sr.no</th>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Name</th>
-                  <th>EmployeeID</th>
-                  <th>CardNumber</th>
-                  <th>PersonnelType</th>
-                  <th>Door</th>
-                  <th>RejectionType</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rejectionAllDetailsToday.map((r, i) => {
-                  let localDate = '';
-                  let localTime = '';
-                  try {
-                    if (r.LocaleMessageTime) {
-                      const dt = new Date(r.LocaleMessageTime);
-                      localDate = dt.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-                      localTime = dt.toLocaleTimeString('en-GB', { timeZone: 'America/Denver' });
-                    } else if (r.DateOnly) {
-                      localDate = (typeof r.DateOnly === 'string' ? r.DateOnly.slice(0, 10) : new Date(r.DateOnly).toISOString().slice(0, 10));
-                      localTime = r.SwipeTime || '';
-                    }
-                  } catch (e) {
-                    localDate = (r.DateOnly || '').slice(0, 10);
-                    localTime = r.SwipeTime || '';
-                  }
-
-                  return (
-                    <tr key={i}>
-                      <td>{i + 1}</td>
-                      <td>{localDate}</td>
-                      <td>{localTime}</td>
-                      <td>{r.ObjectName1}</td>
-                      <td>{r.EmployeeID}</td>
-                      <td>{r.CardNumber || '—'}</td>
-                      <td>{r.PersonnelType || '—'}</td>
-                      <td style={{ maxWidth: 280, wordBreak: 'break-word' }}>{r.Door || r.Location || '—'}</td>
-                      <td>{r.RejectionType || '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </Table>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            style={{ background: '#FFC72C', borderColor: '#FFC72C', color: '#000', fontWeight: 600 }}
-            onClick={() => exportRejectionsToExcel(rejectionAllDetailsToday, `all-rejections-${new Date().toISOString().slice(0, 10)}.xlsx`)}
-          >
-            Export Excel
-          </Button>
-          <Button variant="secondary" onClick={() => setShowAllRejectionsModal(false)}>Close</Button>
-        </Modal.Footer>
-      </Modal>
-
-
-
-    </>
-  );
+  return poolPromise;
 }
+
+// Keep‐alive ping every 5 minutes
+setInterval(async () => {
+  try {
+    const pool = await getPool();
+    await pool.request().query('SELECT 1');
+    // console.log('🔄 MSSQL keep‐alive succeeded');
+  } catch (err) {
+    console.error('⚠️ MSSQL keep‐alive ping failed:', err);
+    // poolPromise stays intact so we keep using the same pool
+  }
+}, 5 * 60 * 1000);
+
+module.exports = { sql, getPool };
+
+
+
+
+88888888888888888888888888888888888888888888888888888888888888888
+
+
+
+
+
+
+// config/siteConfig.js
+const { sql, getPool } = require('./db');
+
+// Pune uses the shared getPool():
+const punePoolPromise = getPool();
+
+// Denver pool configuration
+const denverConfig = {
+  user:     'GSOC_Test',
+  password: 'Westernccure@2025',
+  server:   'SRVWUDEN0891V',
+  database: 'ACVSUJournal_00010028',
+  options: {
+    encrypt:               true,
+    trustServerCertificate: true
+  },
+  pool: {
+    max:                  5,
+    min:                  0,
+
+    // Make these extremely large so that Tarn will never time us out
+    idleTimeoutMillis:    2147483647,
+    acquireTimeoutMillis: 2147483647
+  },
+  connectionTimeout: 30000,  // 30 seconds to establish
+  requestTimeout:    0       // no timeout on individual queries
+};
+
+let denverPoolPromise = null;
+
+async function getDenverPool(attempts = 3) {
+  // If a pool promise is already in-flight (or resolved), return it.
+  if (denverPoolPromise) {
+    return denverPoolPromise;
+  }
+
+  denverPoolPromise = (async () => {
+    const pool = new sql.ConnectionPool(denverConfig);
+
+    // If this pool ever errors, reset the promise so that
+    // next time we can try to re-connect.
+    pool.on('error', err => {
+      console.error('❌ Denver MSSQL pool error:', err);
+      denverPoolPromise = null;
+    });
+
+    try {
+      await pool.connect();
+      console.log('✅ Denver MSSQL pool connected');
+      return pool;
+    } catch (err) {
+      console.error('❌ Denver pool connection failed:', err);
+      denverPoolPromise = null;
+
+      if (attempts > 0) {
+        console.log(`⏳ Retrying Denver pool connect (${attempts} left)…`);
+        await new Promise(res => setTimeout(res, 3000));
+        return getDenverPool(attempts - 1);
+      }
+
+      // If all retries fail, re­throw so that calling code can catch it.
+      throw err;
+    }
+  })().catch(err => {
+    // Catch any unhandled rejection here so it never propagates
+    // out of the immediate getDenverPool() call.
+    console.error('❌ Denver pool promise ultimately failed:', err);
+    denverPoolPromise = null;
+    return null;
+  });
+
+  return denverPoolPromise;
+}
+
+// Every 5 minutes, ping Denver so it never goes idle.
+// If ping fails, reset the poolPromise (so next request will re-connect).
+setInterval(async () => {
+  try {
+    const pool = await getDenverPool();
+    if (pool) {
+      await pool.request().query('SELECT 1');
+      // console.log('🔄 Denver keep-alive succeeded');
+    }
+  } catch (err) {
+    console.error('⚠️ Denver keep-alive failed, resetting poolPromise:', err);
+    denverPoolPromise = null;
+  }
+}, 5 * 60 * 1000);
+
+module.exports = {
+  pune: {
+    name:        'Pune',
+    poolPromise: punePoolPromise,
+    sql
+  },
+  denver: {
+    name:        'Denver',
+    poolPromise: getDenverPool(),
+    sql
+  }
+};
+

@@ -1,288 +1,786 @@
-C:\Users\W0024618\Desktop\swipeData\client\src\components\ERTOverview.css
+Check below each file line by line carefully our issue is Frontend not render any data on UI ...
+so debug each code line by line and fix the issue carefully..
+check where data is block there is no error in console 
+but data is not render in frontend so debug each line and fix the issue 
 
 
+// C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\controllers\liveOccupancyController.js
 
-.ert-dashboard {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  min-height: 100vh;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+const { DateTime }   = require('luxon');
+// const { poolConnect, pool, sql } = require('../config/db');
+const { sql, getPool } = require('../config/db');
+
+const doorZoneMap    = require('../data/doorZoneMap');
+const zoneFloorMap   = require('../data/zoneFloorMap');
+
+const ertMembers = require('../data/puneErtMembers.json');
+
+// track which door→zone keys we've already warned on
+const warnedKeys = new Set();
+
+//update
+function getTodayString() {
+  return DateTime.now()
+    .setZone('Asia/Kolkata')
+    .toFormat('yyyy-LL-dd');
 }
 
-.dashboard-header {
-  background: linear-gradient(90deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 1.5rem 0;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+function normalizeZoneKey(rawDoor, rawDir) {
+  // 1) Ensure it’s a string and trim whitespace
+  let door = String(rawDoor || '').trim();
+
+  // 2) Strip any "_HH:MM:SS" or "_XX:XX:XX" suffix (hex codes or times at end)
+  door = door.replace(/_[0-9A-F]{2}:[0-9A-F]{2}:[0-9A-F]{2}$/, '');
+
+  // 3) Collapse multiple spaces into one, then uppercase
+  door = door.replace(/\s+/g, ' ').toUpperCase();
+
+  // 4) Pick the direction token exactly as doorZoneMap expects
+  const dir = rawDir === 'InDirection' ? 'InDirection' : 'OutDirection';
+
+  return `${door}___${dir}`;
 }
 
-.header-content {
-  text-align: center;
-}
-
-.header-content h1 {
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  color: #f8fafc;
-  font-size: 2.2rem;
-  letter-spacing: -0.5px;
-}
-
-.header-content p {
-  color: #94a3b8;
-  font-size: 1.1rem;
-  margin-bottom: 0;
-}
-
-.stats-card {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(26, 35, 51, 0.9) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  height: 100%;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  position: relative;
-}
-
-.stats-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #3B82F6, #8B5CF6);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.stats-card:hover::before {
-  opacity: 1;
-}
-
-.stats-card:hover,
-.location-card.active {
-  transform: translateY(-5px);
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
-  border-color: rgba(99, 102, 241, 0.4);
-}
-
-.location-card.active {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(29, 40, 58, 0.95) 100%);
-  border-color: rgba(99, 102, 241, 0.6);
-}
-
-.location-card.active::before {
-  opacity: 1;
-}
-
-.stats-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(96, 165, 250, 0.12);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-}
-
-.total-members .stats-icon {
-  background: rgba(139, 92, 246, 0.12);
-}
-
-.stats-label {
-  color: #cbd5e1;
-  font-size: 0.9rem;
-  margin-bottom: 0.4rem;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-}
-
-.stats-value {
-  color: #f8fafc;
-  font-weight: 700;
-  font-size: 2rem;
-  letter-spacing: -0.5px;
-}
-
-.filter-bar {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(26, 35, 51, 0.9) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
-
-.filter-label {
-  color: #e2e8f0;
-  font-weight: 500;
-}
-
-.filter-status {
-  color: #94a3b8;
-  font-size: 0.9rem;
-}
-
-.dashboard-card {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(26, 35, 51, 0.9) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.dashboard-card .card-body {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.dashboard-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #3B82F6, #8B5CF6);
-}
-
-.dashboard-card-header {
-  background: rgba(30, 41, 59, 0.98);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-weight: 600;
-
-  color: #e2e8f0;
-  backdrop-filter: blur(10px);
-}
-
-.role-icon {
-  font-size: 1.2rem;
-}
-
-.role-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.member-item {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  transition: all 0.3s ease;
-  padding: 0.2rem 1.5rem;
-  margin: 0 -1.5rem;
-}
-
-.member-item:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.member-item:last-child {
-  border-bottom: none;
+/** Normalize "Last, First" or "First Last" → lowercase "first last" */
+function normalizePersonName(raw) {
+  let n = String(raw || '').trim();
+  if (n.includes(',')) {
+    const [last, rest] = n.split(',', 2);
+    n = `${rest.trim()} ${last.trim()}`;
+  }
+  return n.toLowerCase();
 }
 
 
-.member-photo-container {
-  position: relative;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  overflow: hidden;
-  flex-shrink: 0;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-}
+// --- new mapDoorToZone ---
+function mapDoorToZone(rawDoor, rawDir) {
+  const key = normalizeZoneKey(rawDoor, rawDir);
+  const zone = doorZoneMap[key];
 
-/* Available (green border) */
-.member-photo-container.present-border {
-  border: 2px solid #10b981;
-  /* Tailwind's emerald-500 */
-}
-
-/* Away (white border) */
-.member-photo-container.away-border {
-  border: 2px solid #ffffff;
-}
-
-.member-photo {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center top;
-}
-
-
-
-
-.member-name {
-  color: #f1f5f9;
-  font-weight: 600;
-  font-size: 1.05rem;
-}
-
-.status-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.35em 0.65em;
-}
-
-.member-contact-info {
-  padding-left: 12px;
-  border-left: 2px solid rgba(96, 165, 250, 0.3);
-  margin-left: 30px;
-  margin-top: 0.75rem;
-}
-
-.contact-item {
-  display: flex;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.contact-item:last-child {
-  margin-bottom: 0;
-}
-
-.contact-icon {
-  width: 16px;
-  margin-right: 0.75rem;
-  flex-shrink: 0;
-}
-
-.contact-link,
-.contact-text {
-  font-size: 0.9rem;
-  color: #cbd5e1;
-  text-decoration: none;
-  transition: color 0.2s;
-  word-break: break-word;
-}
-
-.contact-link:hover {
-  color: #60a5fa;
-}
-
-.text-teal {
-  color: #0d9488;
-}
-
-.text-orange {
-  color: #f97316;
-}
-
-.text-purple {
-  color: #a855f7;
-}
-
-@media (max-width: 992px) {
-  .dashboard-card {
-    margin-bottom: 1.5rem;
+  if (!zone) {
+    if (!warnedKeys.has(key)) {
+      console.warn('⛔ Unmapped door–direction key:', key);
+      warnedKeys.add(key);
+    }
+    return 'Unknown Zone';
   }
 
-  .header-content h1 {
-    font-size: 1.8rem;
-  }
+  // IMPORTANT: return the zone exactly as defined in doorZoneMap
+  return zone;
 }
+
+
+async function fetchNewEvents(since) {
+  // await the shared pool promise instead of poolConnect
+  const pool = await getPool();
+  const req  = pool.request();
+  req.input('since', sql.DateTime2, since);
+
+// console.log('🔎 [Pune] fetchNewEvents called with since =', since.toISOString());
+  const { recordset } = await req.query(`
+    WITH CombinedQuery AS (
+      SELECT
+       DATEADD(MINUTE,-1 *t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
+       
+        t1.ObjectName1,
+        CASE
+          WHEN t3.Name IN ('Contractor','Terminated Contractor') THEN t2.Text12
+          ELSE CAST(t2.Int1 AS NVARCHAR)
+        END AS EmployeeID,
+        t1.ObjectIdentity1 AS PersonGUID,
+        t3.Name AS PersonnelType,
+        COALESCE(
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+          sc.value
+        ) AS CardNumber,
+        t5a.value AS AdmitCode,
+        t5d.value AS Direction,
+        t1.ObjectName2 AS Door
+      FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] t1
+      LEFT JOIN [ACVSCore].[Access].[Personnel]     t2 ON t1.ObjectIdentity1 = t2.GUID
+      LEFT JOIN [ACVSCore].[Access].[PersonnelType] t3 ON t2.PersonnelTypeId = t3.ObjectID
+      LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] t5a
+        ON t1.XmlGUID = t5a.GUID AND t5a.Name = 'AdmitCode'
+      LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] t5d
+        ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+      LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] t_xml
+        ON t1.XmlGUID = t_xml.GUID
+      LEFT JOIN (
+        SELECT GUID, value
+        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
+        WHERE Name IN ('Card','CHUID')
+      ) sc ON t1.XmlGUID = sc.GUID
+      WHERE
+        t1.MessageType     = 'CardAdmitted'
+        AND t1.PartitionName2 = 'APAC.Default'
+        AND DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) >@since
+    )
+    SELECT
+      LocaleMessageTime,
+      CONVERT(VARCHAR(10), LocaleMessageTime, 23) AS Dateonly,
+      CONVERT(VARCHAR(8) , LocaleMessageTime, 108) AS Swipe_Time,
+      EmployeeID,
+      PersonGUID,
+      ObjectName1,
+      PersonnelType,
+      CardNumber,
+      AdmitCode,
+      Direction,
+      Door
+    FROM CombinedQuery
+    ORDER BY LocaleMessageTime ASC;
+  `);
+
+  // console.log(`📥 [Pune] fetched ${recordset.length} rows:`,
+    // recordset.map(r => r.LocaleMessageTime.toISOString()));
+
+  return recordset;
+}
+
+async function buildOccupancy(allEvents) {
+  const current      = {};
+  const uniquePeople = new Map();
+// --- simplified per-event loop inside buildOccupancy ---
+for (const evt of allEvents) {
+  const {
+    EmployeeID, PersonGUID,
+    ObjectName1, PersonnelType,
+    CardNumber, Dateonly,
+    Swipe_Time, Direction, Door
+  } = evt;
+
+  const dedupKey = PersonGUID || EmployeeID || CardNumber || ObjectName1;
+  const zoneRaw  = mapDoorToZone(Door, Direction);
+
+  // 1) If we can’t map door+direction to a valid zone, skip this event entirely.
+  if (zoneRaw === 'Unknown Zone') {
+    continue;
+  }
+
+  const zoneLower = zoneRaw.toLowerCase();
+
+  // OutDirection: eviction only for the real "Out of office"
+  if (Direction === 'OutDirection') {
+    if (zoneLower === 'out of office') {
+      uniquePeople.delete(dedupKey);
+      delete current[dedupKey];
+    } else {
+      // Keep them in headcount, update last-seen
+      uniquePeople.set(dedupKey, PersonnelType);
+      current[dedupKey] = {
+        Dateonly, Swipe_Time,
+        EmployeeID, ObjectName1, CardNumber,
+        PersonnelType,
+        zone: zoneRaw,
+        door: Door,
+        Direction
+      };
+    }
+    continue;
+  }
+
+  // InDirection → normal check-in
+  if (Direction === 'InDirection') {
+    uniquePeople.set(dedupKey, PersonnelType);
+    current[dedupKey] = {
+      Dateonly, Swipe_Time,
+      EmployeeID, ObjectName1, CardNumber,
+      PersonnelType,
+      zone: zoneRaw,
+      door: Door,
+      Direction
+    };
+    continue;
+  }
+  // Catch-all eviction
+  uniquePeople.delete(dedupKey);
+  delete current[dedupKey];
+}
+
+// live headcounts (only from uniquePeople, which has already evicted all true out-of-office)
+  let employeeCount   = 0;
+  let contractorCount = 0;
+  for (const pt of uniquePeople.values()) {
+    if (['Employee','Terminated Personnel'].includes(pt)) employeeCount++;
+    else contractorCount++;
+  }
+
+  // Build zone→people map, but filter out any out-of-office at this final step too
+  const zoneMap = {};
+  for (const emp of Object.values(current)) {
+    const zKey = emp.zone.toLowerCase();
+    if (zKey === 'out of office') continue;
+    zoneMap[emp.zone] = zoneMap[emp.zone] || [];
+    zoneMap[emp.zone].push(emp);
+  }
+
+  // zoneDetails
+  const zoneDetails = Object.fromEntries(
+    Object.entries(zoneMap).map(([zone, emps]) => {
+      const byType = emps.reduce((acc, e) => {
+        acc[e.PersonnelType] = (acc[e.PersonnelType]||0) + 1;
+        return acc;
+      }, {});
+      return [ zone, { total: emps.length, byPersonnelType: byType, employees: emps } ];
+    })
+  );
+
+  // floorBreakdown
+  const floorMap = {};
+  for (const [zone, data] of Object.entries(zoneDetails)) {
+    const floor = zoneFloorMap[zone] || 'Unknown Floor';
+    floorMap[floor] = floorMap[floor] || { total: 0, byPersonnelType: {} };
+    floorMap[floor].total += data.total;
+    for (const [pt, c] of Object.entries(data.byPersonnelType)) {
+      floorMap[floor].byPersonnelType[pt] = (floorMap[floor].byPersonnelType[pt]||0) + c;
+    }
+  }
+
+
+  const ertStatus = Object.fromEntries(
+    Object.entries(ertMembers).map(([role, members]) => {
+      const list = members.map(m => {
+        // pick the correct name field (JSON uses "Name")
+        const rawName = m.name || m.Name;
+        const expected = normalizePersonName(rawName);
+
+        // find a matching swipe in current[]
+        const matchEvt = Object.values(current).find(e => {
+          return normalizePersonName(e.ObjectName1) === expected;
+        });
+        return {
+          ...m,
+          present: !!matchEvt,
+          zone:    matchEvt ? matchEvt.zone : null
+        };
+     });
+      return [ role, list ];
+    })
+  );
+
+  return {
+    asOf:             new Date().toISOString(),
+    summary:          Object.entries(zoneDetails).map(([z,d])=>({ zone: z, count: d.total })),
+    zoneBreakdown:    Object.entries(zoneDetails).map(([z,d])=>({ zone: z, ...d.byPersonnelType, total: d.total })),
+    floorBreakdown:   Object.entries(floorMap).map(([f,d])=>({ floor: f, ...d.byPersonnelType, total: d.total })),
+    details:          zoneMap,
+    personnelSummary: { employees: employeeCount, contractors: contractorCount },
+     ertStatus,
+  
+  personnelBreakdown: (() => {
+    const map = new Map();
+    // uniquePeople: Map<dedupKey, PersonnelType>
+    for (const pt of uniquePeople.values()) {
+      map.set(pt, (map.get(pt) || 0) + 1);
+    }
+    return Array.from(map, ([personnelType, count]) => ({ personnelType, count }));
+  })(),
+  };
+}
+
+
+/**
+ * Build “visited today” from the same in‐memory stream
+ *
+ * @param {Array} allEvents  - events where evt.Dateonly is already local yyyy-MM-dd
+ * @param {DateTime|Date|string} [asOf] - optional Luxon DateTime, JS Date or yyyy-MM-dd string.
+ *                                       If provided, "today" will be computed from this instead
+ *                                       of DateTime.now().setZone('Asia/Kolkata').
+ */
+function buildVisitedToday(allEvents, asOf) {
+  // Determine "today" in Asia/Kolkata:
+  let today;
+  if (asOf) {
+    // Accept Luxon DateTime, JS Date, or plain yyyy-MM-dd string
+    if (typeof asOf === 'string') {
+      today = asOf; // assume already 'yyyy-LL-dd'
+    } else if (asOf instanceof Date) {
+      today = DateTime.fromJSDate(asOf, { zone: 'Asia/Kolkata' }).toFormat('yyyy-LL-dd');
+    } else if (asOf && typeof asOf.toFormat === 'function') {
+      // assume Luxon DateTime
+      today = asOf.setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+    } else {
+      // fallback to now
+      today = DateTime.now().setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+    }
+  } else {
+    // default behaviour: "today" is now in Kolkata
+    today = DateTime.now().setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+  }
+
+  // Use evt.Dateonly (already “yyyy-MM-dd” in local zone) to pick out today's InDirection swipes
+  const todayIns = allEvents.filter(evt => {
+    return (
+      evt.Direction === 'InDirection' &&
+      evt.Dateonly === today
+    );
+  });
+
+  // Dedupe by PersonGUID → keep the latest swipe
+  const dedup = new Map();
+  for (const e of todayIns) {
+    const key = e.PersonGUID; // same as original logic
+    const prev = dedup.get(key);
+    // Compare LocaleMessageTime lexicographically is fine for ISO strings; keep original behavior
+    if (!prev || e.LocaleMessageTime > prev.LocaleMessageTime) {
+      dedup.set(key, e);
+    }
+  }
+
+  const finalList = Array.from(dedup.values());
+
+  // Separate employees vs contractors (preserve original classification list)
+  const employees = finalList.filter(e =>
+    !['Contractor','Terminated Contractor','Temp Badge','Visitor','Property Management']
+      .includes(e.PersonnelType)
+  ).length;
+  const contractors = finalList.length - employees;
+
+  return { employees, contractors, total: finalList.length };
+}
+
+
+
+/** Server‐Sent‐Events endpoint */
+exports.getLiveOccupancy = async (req, res) => {
+  try {
+    // wait for the shared pool to be ready
+    await getPool();
+
+    res.writeHead(200, {
+      'Content-Type':  'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection':    'keep-alive'
+    });
+    res.write('\n');
+
+    // pull last 24h on startup
+    // let lastSeen = new Date(Date.now() - 24*60*60*1000);
+    let lastSeen = new Date();
+    const events = [];
+
+    const push = async () => {
+
+
+
+
+    // Option B: Recompute date from the JS timestamp in Asia/Kolkata:
+    const todayKolkata = DateTime.now().setZone('Asia/Kolkata').toISODate();
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ts = DateTime.fromJSDate(events[i].LocaleMessageTime, { zone: 'utc' })
+                     .setZone('Asia/Kolkata')
+                     .toISODate();
+      if (ts !== todayKolkata) {
+        events.splice(i, 1);
+      }
+    }
+
+
+//  console.log('🔄 [PUSH] Running at:', new Date().toISOString());
+  // console.log('🔍 Last seen swipe time:', lastSeen);
+
+
+      const fresh = await fetchNewEvents(lastSeen);
+
+      //  console.log('📥 New events fetched:', fresh.length);
+
+      if (fresh.length) {
+        // lastSeen = fresh[fresh.length - 1].LocaleMessageTime;
+         lastSeen = new Date();
+        events.push(...fresh);
+      }
+
+  
+      // build occupancy + today counts
+      const occupancy  = await buildOccupancy(events);
+      const todayStats = buildVisitedToday(events);
+
+      occupancy.totalVisitedToday = todayStats.total;
+      occupancy.visitedToday      = {
+        employees:   todayStats.employees,
+        contractors: todayStats.contractors,
+        total:       todayStats.total
+      };
+
+  
+
+      // add an `id:` so EventSource treats even identical payloads as “new”
+      
+      const sid = Date.now();
+      res.write(`id: ${sid}\n`);
+      res.write(`data: ${JSON.stringify(occupancy)}\n\n`);
+
+    
+      if (typeof res.flush === 'function') {
+        res.flush();
+      }
+
+     };
+    await push();
+    const timer = setInterval(push, 2000);
+    req.on('close', () => clearInterval(timer));
+
+  } catch (err) {
+    console.error('Live occupancy SSE error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  }
+};
+
+
+
+// GET /api/occupancy-at-time-pune?date=YYYY-MM-DD&time=HH:MM[:SS]
+exports.getPuneSnapshotAtDateTime = async (req, res) => {
+  try {
+    const { date, time } = req.query;
+    if (!date || !time) {
+      return res.status(400).json({
+        error: 'missing query params: expected ?date=YYYY-MM-DD&time=HH:MM[:SS]'
+      });
+    }
+
+    // Validate date
+    const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!dateMatch) {
+      return res.status(400).json({ error: 'invalid "date" format; expected YYYY-MM-DD' });
+    }
+
+    // Validate time
+    const timeMatch = /^([0-1]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(time);
+    if (!timeMatch) {
+      return res.status(400).json({ error: 'invalid "time" format; expected HH:MM or HH:MM:SS' });
+    }
+
+    const year   = Number(dateMatch[1]);
+    const month  = Number(dateMatch[2]);
+    const day    = Number(dateMatch[3]);
+    const hour   = Number(timeMatch[1]);
+    const minute = Number(timeMatch[2]);
+    const second = timeMatch[3] ? Number(timeMatch[3]) : 0;
+
+    // Build Pune-local datetime
+    const atDt = DateTime.fromObject(
+      { year, month, day, hour, minute, second, millisecond: 0 },
+      { zone: 'Asia/Kolkata' }
+    );
+
+    if (!atDt.isValid) {
+      return res.status(400).json({ error: 'invalid date+time combination' });
+    }
+
+    // Convert to UTC for SQL boundary
+    const untilUtc = atDt.setZone('utc').toJSDate();
+
+    // -----------------
+    // Step 1: fetch events in 24h window ending at atDt
+    const pool = await getPool();
+    const reqDb = pool.request();
+    reqDb.input('until', sql.DateTime2, untilUtc);
+
+    const { recordset } = await reqDb.query(`
+      WITH CombinedQuery AS (
+        SELECT
+          t1.MessageUTC,   -- always UTC
+          t1.ObjectName1,
+          CASE
+            WHEN t3.Name IN ('Contractor','Terminated Contractor') THEN t2.Text12
+            ELSE CAST(t2.Int1 AS NVARCHAR)
+          END AS EmployeeID,
+          t1.ObjectIdentity1 AS PersonGUID,
+          t3.Name AS PersonnelType,
+          COALESCE(
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+            sc.value
+          ) AS CardNumber,
+          t5a.value AS AdmitCode,
+          t5d.value AS Direction,
+          t1.ObjectName2 AS Door
+        FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLog] t1
+        LEFT JOIN [ACVSCore].[Access].[Personnel]     t2 ON t1.ObjectIdentity1 = t2.GUID
+        LEFT JOIN [ACVSCore].[Access].[PersonnelType] t3 ON t2.PersonnelTypeId = t3.ObjectID
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] t5a
+          ON t1.XmlGUID = t5a.GUID AND t5a.Name = 'AdmitCode'
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred] t5d
+          ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+        LEFT JOIN [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxml] t_xml
+          ON t1.XmlGUID = t_xml.GUID
+        LEFT JOIN (
+          SELECT GUID, value
+          FROM [ACVSUJournal_00010029].[dbo].[ACVSUJournalLogxmlShred]
+          WHERE Name IN ('Card','CHUID')
+        ) sc ON t1.XmlGUID = sc.GUID
+        WHERE
+          t1.MessageType     = 'CardAdmitted'
+          AND t1.PartitionName2 = 'APAC.Default'
+          AND t1.MessageUTC <= @until
+          AND DATEADD(HOUR, -24, @until) < t1.MessageUTC
+      )
+      SELECT *
+      FROM CombinedQuery
+      ORDER BY MessageUTC ASC;
+    `);
+
+    // -----------------
+    // Step 2: convert UTC → Asia/Kolkata
+    const events = recordset.map(e => {
+      const local = DateTime.fromJSDate(e.MessageUTC, { zone: 'utc' })
+                            .setZone('Asia/Kolkata');
+      return {
+        ...e,
+        LocaleMessageTime: local.toISO(),
+        Dateonly: local.toFormat('yyyy-LL-dd'),
+        Swipe_Time: local.toFormat('HH:mm:ss'),
+      };
+    });
+
+    // -----------------
+    // Step 3: filter only same Pune date
+    const targetDate = atDt.toFormat('yyyy-LL-dd');
+    const filtered = events.filter(e => e.Dateonly === targetDate);
+
+    // Step 4: build occupancy snapshot
+    const occupancy = await buildOccupancy(filtered);
+
+    // Step 5: visited-today counts aligned to atDt
+    // const visitedStats = buildVisitedToday(filtered);
+    
+    const visitedStats = buildVisitedToday(filtered, atDt);  // this add new code as per function buildVisitedToday change 📝 📝
+
+    // ---- Output timestamps ----
+    occupancy.asOfLocal = atDt.toISO(); // Pune-local with offset
+    occupancy.asOfUTC   = `${date}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:${String(second).padStart(2,'0')}Z`;
+
+    occupancy.totalVisitedToday = visitedStats.total;
+    occupancy.visitedToday = visitedStats;
+
+    return res.json(occupancy);
+  } catch (err) {
+    console.error('getPuneSnapshotAtDateTime error:', err);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+
+
+
+
+
+
+
+
+// server.js
+require('dotenv').config();
+console.log('▶︎ Loading:', __filename);
+console.log('▶︎ CWD:', process.cwd());
+
+const express = require('express');
+const cors    = require('cors');
+const path    = require('path');
+
+// --- Guarded controller imports ---
+// Pune (core) controller
+let liveCtrl = null;
+try {
+  liveCtrl = require('./controllers/liveOccupancyController');
+} catch (e) {
+  console.error('Failed to load liveOccupancyController:', e && e.stack ? e.stack : e);
+  liveCtrl = null;
+}
+
+// Optional Denver controllers — load them safely (server still starts if they fail)
+let denverLiveCtrl = null;
+try { denverLiveCtrl = require('./controllers/denverLiveOccupancyController'); } catch (e) {
+  console.warn('denverLiveOccupancyController not loaded:', e && e.message ? e.message : e);
+}
+let denverInOutCtrl = null;
+try { denverInOutCtrl = require('./controllers/denverInOutInconsistencyController'); } catch (e) {
+  console.warn('denverInOutInconsistencyController not loaded:', e && e.message ? e.message : e);
+}
+let denverRejectionsCtrl = null;
+try { denverRejectionsCtrl = require('./controllers/denverRejection'); } catch (e) {
+  console.warn('denverRejection controller not loaded:', e && e.message ? e.message : e);
+}
+
+// --- Global process handlers (already good to have) ---
+process.on('unhandledRejection', (reason, p) => {
+  console.error('❌ Unhandled Rejection at:', p, 'reason:', reason && reason.stack ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught exception:', err && err.stack ? err.stack : err);
+});
+
+// --- Routes that always exist (employeeRoutes may be optional in your project) ---
+let employeeRoutes = null;
+try {
+  employeeRoutes = require('./routes/employeeRoutes');
+} catch (e) {
+  console.warn('employeeRoutes not loaded:', e && e.message ? e.message : e);
+  employeeRoutes = null;
+}
+
+// --- Create app (must come before route registrations) ---
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Log every incoming request
+app.use((req, res, next) => {
+  console.log(`➡︎ ${req.method} ${req.url}`);
+  next();
+});
+
+// Sanity‐check
+app.get('/ping', (req, res) => res.send('pong'));
+
+// SSE no‐buffering helper
+const noBuffering = (req, res, next) => {
+  res.set('X-Accel-Buffering', 'no');
+  next();
+};
+
+// 1) Employee API (if available)
+if (employeeRoutes) {
+  app.use('/api/employees', employeeRoutes);
+} else {
+  // optional: return 501 for employees route if someone calls it
+  app.use('/api/employees', (req, res) => res.status(501).json({ error: 'Employees routes not available' }));
+}
+
+// 2) Pune live‐occupancy SSE (guarded)
+if (liveCtrl && typeof liveCtrl.getLiveOccupancy === 'function') {
+  app.get('/api/live-occupancy', noBuffering, liveCtrl.getLiveOccupancy);
+} else {
+  app.get('/api/live-occupancy', noBuffering, (req, res) => {
+    return res.status(500).json({ error: 'Pune live controller not available' });
+  });
+}
+
+// Pune snapshot endpoint
+if (liveCtrl && typeof liveCtrl.getPuneSnapshotAtDateTime === 'function') {
+  app.get('/api/occupancy-at-time-pune', noBuffering, liveCtrl.getPuneSnapshotAtDateTime);
+} else {
+  app.get('/api/occupancy-at-time-pune', noBuffering, (req, res) => {
+    return res.status(500).json({ error: 'Pune snapshot controller not available' });
+  });
+}
+
+// 3) Denver live‐occupancy SSE (guarded)
+app.get('/api/live-occupancy-denver', noBuffering, (req, res, next) => {
+  if (denverLiveCtrl && typeof denverLiveCtrl.getDenverLiveOccupancy === 'function') {
+    return denverLiveCtrl.getDenverLiveOccupancy(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver live occupancy controller not available' });
+});
+
+// Denver snapshot
+app.get('/api/occupancy-at-time-denver', noBuffering, (req, res, next) => {
+  if (denverLiveCtrl && typeof denverLiveCtrl.getDenverSnapshotAtDateTime === 'function') {
+    return denverLiveCtrl.getDenverSnapshotAtDateTime(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver snapshot controller not available' });
+});
+
+// Denver in/out
+app.get('/api/inout-inconsistency-denver', noBuffering, (req, res, next) => {
+  if (denverInOutCtrl && typeof denverInOutCtrl.getDenverInOutInconsistency === 'function') {
+    return denverInOutCtrl.getDenverInOutInconsistency(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver in/out controller not available' });
+});
+
+// Rejections
+app.get('/api/rejections', noBuffering, (req, res, next) => {
+  if (denverRejectionsCtrl && typeof denverRejectionsCtrl.getRejections === 'function') {
+    return denverRejectionsCtrl.getRejections(req, res, next);
+  }
+  return res.status(501).json({ error: 'Denver rejections controller not available' });
+});
+
+// Serve React build & health
+const buildPath = path.join(__dirname, '..', 'client', 'build');
+app.use(express.static(buildPath));
+app.get('/health', (req, res) => res.send('OK'));
+
+// 404 catcher
+app.use((req, res) => {
+  console.log(`⚠️  No route for ${req.method} ${req.url}`);
+  res.status(404).send(`Cannot ${req.method} ${req.url}`);
+});
+
+const PORT = process.env.PORT || 3010;
+app.listen(PORT, '0.0.0.0', () =>
+  console.log(`✔️  Server listening on http://0.0.0.0:${PORT}`)
+);
+
+
+}
+
+
+
+
+
+
+
+D:\DASHBOARD\swipeData\client\src\services\app.js
+
+
+import React, { useEffect, useState } from 'react';
+import { fetchOccupancyData } from './services/api';
+import SummaryChart from './components/SummaryChart';
+import ZoneDetailsTable from './components/ZoneDetailsTable';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
+function App() {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const newData = await fetchOccupancyData();
+      setData(newData);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!data) return <div className="text-center mt-5">Loading...</div>;
+
+  return (
+    <div className="container mt-4">
+      <h2 className="text-center mb-4">Live Employee Occupancy Dashboard</h2>
+      <SummaryChart summary={data.summary} />
+      <ZoneDetailsTable details={data.details} />
+    </div>
+  );
+}
+
+export default App;
+
+
+
+
+
+
+
+
+
+// src/api.js
+import axios from 'axios';
+
+const API_BASE = (process.env.REACT_APP_API_BASE_URL)
+  || (process.env.NODE_ENV === 'development' ? 'http://10.199.22.57:3010' : window.location.origin);
+
+const api = axios.create({
+  baseURL: `${API_BASE.replace(/\/$/, '')}/api`
+});
+
+export default api;
+
+
+
+
+
+
+

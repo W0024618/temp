@@ -1,3 +1,124 @@
+// client/src/App.js
+import React, { useEffect, useState, useRef } from 'react';
+import SummaryChart from './components/SummaryChart';
+import ZoneDetailsTable from './components/ZoneDetailsTable';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
+// compute API base the same way your other client file does
+const API_BASE = (process.env.REACT_APP_API_BASE_URL)
+  || (process.env.NODE_ENV === 'development' ? 'http://10.199.22.57:3010' : window.location.origin);
+const ES_URL = `${API_BASE.replace(/\/$/, '')}/api/live-occupancy`;
+
+export default function App() {
+  const [data, setData] = useState(null);
+  const esRef = useRef(null);
+  const reconnectTimer = useRef(null);
+
+  useEffect(() => {
+    // Create a new EventSource and listen for messages
+    function connect() {
+      if (esRef.current) {
+        try { esRef.current.close(); } catch (e) { /* ignore */ }
+      }
+
+      const es = new EventSource(ES_URL);
+      esRef.current = es;
+
+      es.onopen = () => {
+        console.log('[SSE] connected to', ES_URL);
+      };
+
+      es.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          // Optional: sanity-check payload shape
+          setData(payload);
+        } catch (err) {
+          console.error('[SSE] parse error', err, e.data);
+        }
+      };
+
+      es.onerror = (err) => {
+        console.error('[SSE] error', err);
+        // close and schedule reconnect
+        try { es.close(); } catch (e) {}
+        esRef.current = null;
+        // exponential-ish reconnect capped at 30s
+        if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = setTimeout(() => connect(), 5000);
+      };
+    }
+
+    connect();
+
+    return () => {
+      if (esRef.current) {
+        try { esRef.current.close(); } catch(e) {}
+      }
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+    };
+  }, []);
+
+  if (!data) return <div className="text-center mt-5">Waiting for server… (SSE)</div>;
+
+  return (
+    <div className="container mt-4">
+      <h2 className="text-center mb-4">Live Employee Occupancy Dashboard</h2>
+
+      {/* summaryData often sits in data.summary */}
+      <SummaryChart summary={data.summary || []} />
+
+      {/* details is the zone->employees map */}
+      <ZoneDetailsTable details={data.details || {}} />
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+// client/src/services/api.js
+import axiosBase from '../api'; // uses your existing src/api.js axios instance
+
+export async function fetchOccupancyData() {
+  try {
+    // Try the typical "current occupancy" endpoint first (someservers provide it)
+    const resp = await axiosBase.get('/current-occupancy').catch(() => null);
+    if (resp && resp.data) return resp.data;
+
+    // Fallback: If server doesn't expose /current-occupancy, we can call snapshot endpoint
+    // (or create a tiny endpoint that returns latest snapshot). Attempt /occupancy-at-time-pune (not ideal)
+    // For now, return null so UI shows "Waiting..."
+    return null;
+  } catch (err) {
+    console.error('fetchOccupancyData error', err);
+    return null;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Check below each file line by line carefully our issue is Frontend not render any data on UI ...
 so debug each code line by line and fix the issue carefully..
 check where data is block there is no error in console 

@@ -1,3 +1,8 @@
+Test-NetConnection 10.199.22.57 -Port 3013
+
+
+
+
 
 
 

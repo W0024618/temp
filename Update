@@ -9,3 +9,19 @@ const CompanySummary = lazy(() => import('./components/CompanySummary'));
                 />
                 
               } />
+
+
+
+
+.nav-item-new {
+  font-size: 1.4rem;
+}
+
+
+
+
+
+.tooltip-inner {
+  background-color: white;
+  color: #000000;
+}

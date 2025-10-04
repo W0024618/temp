@@ -1,4 +1,7 @@
-  <Route path="/companysummary" element={
+const CompanySummary = lazy(() => import('./components/CompanySummary'));
+
+
+<Route path="/companysummary" element={
                 <CompanySummary
                   detailsData={liveData.details}
                   personnelBreakdown={liveData.personnelBreakdown}

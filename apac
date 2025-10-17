@@ -1,281 +1,453 @@
 
-// C:\Users\W0024618\Desktop\apac-occupancy-frontend\src\components\Header.jsx
-import React, { useEffect, useState } from 'react';
-import {
-  AppBar, Toolbar, Box, Typography,
-  Select, MenuItem, IconButton, Drawer, List, ListItemButton, ListItemIcon, ListItemText, Tooltip, useMediaQuery
-} from '@mui/material';
-import { useTheme } from '@mui/material/styles';
-import { useNavigate, useLocation } from 'react-router-dom';
 
-import MenuIcon from '@mui/icons-material/Menu';
-import HomeIcon from '@mui/icons-material/Home';
-import HistoryIcon from '@mui/icons-material/History';
-import ListAltIcon from '@mui/icons-material/ListAlt';
-import CloseIcon from '@mui/icons-material/Close';
+//C:\Users\W0024618\Desktop\apac-occupancy-frontend\src\pages\Dashboard.jsx
+import React, { useMemo } from 'react';
+import {Container, Box, Typography, Skeleton,Paper} from '@mui/material';
 
-import wuLogo from '../assets/images/wu-logo.png';
-import IndiaFlag from '../assets/flags/india.png';
-import MalaysiaFlag from '../assets/flags/malaysia.png';
-import PhilippinesFlag from '../assets/flags/philippines.png';
-import JapanFlag from '../assets/flags/japan.png';
-import HYDFlag from '../assets/flags/india.png';
+import Header from '../components/Header';
+import Footer from '../components/Footer';
 
-import { partitionList } from '../services/occupancy.service';
+import SummaryCard from '../components/SummaryCard';
+import CompositeChartCard from '../components/CompositeChartCard';
+import PieChartCard from '../components/PieChartCard';
+
 import { useLiveOccupancy } from '../hooks/useLiveOccupancy';
+import { partitionList } from '../services/occupancy.service';
+import buildingCapacities from '../data/buildingCapacities';
+import floorCapacities from '../data/floorCapacities';
+import LoadingSpinner from '../components/LoadingSpinner';
 
-const displayNameMap = {
-  'IN.Pune': 'Pune',
-  'MY.Kuala Lumpur': 'Kuala Lumpur',
-  'PH.Quezon': 'Quezon City',
-  'PH.Taguig': 'Taguig',
-  'JP.Tokyo': 'Tokyo',
-  'IN.HYD': 'Hyderabad',
-};
+
+import indiaFlag from '../assets/flags/india.png';
+import japanFlag from '../assets/flags/japan.png';
+import malaysiaFlag from '../assets/flags/malaysia.png';
+import philippinesFlag from '../assets/flags/philippines.png';
+
+
+const palette15 = [
+  '#FFC107', '#E57373', '#4CAF50', '#FFEB3B', '#FFD666',
+  '#8BC34A', '#3F51B5', '#9C27B0', '#00BCD4', '#8BC34A',
+  '#FF9800', '#673AB7', '#009688', '#CDDC39', '#795548'];
 
 const flagMap = {
-  'Pune': IndiaFlag,
-  'MY.Kuala Lumpur': MalaysiaFlag,
-  'Quezon City': PhilippinesFlag,
-  'Taguig City': PhilippinesFlag,
-  'JP.Tokyo': JapanFlag,
-  'IN.HYD': HYDFlag,
+  'Pune': indiaFlag,
+  'Quezon City': philippinesFlag,
+  'JP.Tokyo': japanFlag,
+  'MY.Kuala Lumpur': malaysiaFlag,
+  'Taguig City': philippinesFlag,
+  'IN.HYD': indiaFlag
 };
 
-export default function Header() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { data } = useLiveOccupancy(1000);
-  const [lastUpdate, setLastUpdate] = useState('');
-  const [selectedPartition, setSelectedPartition] = useState('');
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'lg'));
+const displayNameMap = {
+  'IN.HYD': 'Hyderabad',
+  'JP.Tokyo': 'Tokyo',
+  'MY.Kuala Lumpur': 'Kuala Lumpur',
+  'PH.Quezon': 'Quezon City',
+  'PH.Taguig': 'Taguig City',
+  'Pune': 'Pune',
+};
 
-  useEffect(() => {
-    if (data) setLastUpdate(new Date().toLocaleTimeString());
-  }, [data]);
 
-  // Routing setup
-  const parts = location.pathname.split('/').filter(Boolean);
-  const isPartitionPath = parts[0] === 'partition' && Boolean(parts[1]);
-  const currentPartition = isPartitionPath ? decodeURIComponent(parts[1]) : '';
-  const suffixSegments = isPartitionPath
-    ? parts.slice(2)
-    : parts[0] === 'history'
-      ? ['history']
-      : [];
+export default function Dashboard() {
+  // 1) Live data hook
+  const { data, loading, error } = useLiveOccupancy(1000);
 
-  useEffect(() => {
-    setSelectedPartition(currentPartition);
-  }, [currentPartition]);
+  // 2) Partitions
+  const regions = data?.realtime || {};
 
-  const makePartitionPath = (suffix) => {
-    const base = `/partition/${encodeURIComponent(currentPartition)}`;
-    return suffix ? `${base}/${suffix}` : base;
-  };
+  // 3) Totals
 
-  const handlePartitionChange = (newPartition) => {
-    if (!newPartition) return navigate('/');
-    setSelectedPartition(newPartition);
-    if (newPartition === 'Pune' && suffixSegments.length === 0) {
-      window.location.href = 'http://10.199.22.57:3011/';
-      return;
-    }
 
-    const base = `/partition/${encodeURIComponent(newPartition)}`;
-    const full = suffixSegments.length
-      ? `${base}/${suffixSegments.join('/')}`
-      : base;
+  const partitions = useMemo(() => {
+  return partitionList
+    .map(name => {
+      // collect all region keys that belong to this partition (e.g. all "IN.Pune.*")
+      const matchingKeys = Object.keys(regions).filter(k => k.includes(name));
 
-    navigate(full);
-    setDrawerOpen(false);
-  };
+      // merge totals and floors across all matching keys
+      let total = 0, Employee = 0, Contractor = 0;
+      const mergedFloors = {};
 
-  const navItems = [
-    { icon: <HomeIcon />, label: 'Home Page', action: () => navigate('/') },
-    { icon: <HistoryIcon />, label: 'History', action: () => navigate(currentPartition ? makePartitionPath('history') : '/history') },
-    { icon: <ListAltIcon />, label: 'Live Details Page', action: () => navigate(currentPartition ? makePartitionPath('details') : '/partition/Pune/details') },
-  ];
+      matchingKeys.forEach(k => {
+        const r = regions[k];
+        if (!r) return;
+        total += r.total || 0;
+        Employee += r.Employee || 0;
+        Contractor += r.Contractor || 0;
+        Object.entries(r.floors || {}).forEach(([f, c]) => {
+          mergedFloors[f] = (mergedFloors[f] || 0) + c;
+        });
+      });
 
-  return (
-    <>
-      <AppBar
-        position="static"
+      return {
+        name,
+        total,
+        Employee,
+        Contractor,
+        floors: mergedFloors,
+        flag: flagMap[name] || null
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+}, [regions]);
+
+
+  const todayTot = data?.today?.total || 0;
+  const todayEmp = data?.today?.Employee || 0;
+  const todayCont = data?.today?.Contractor || 0;
+  const realtimeTot = partitions.reduce((sum, p) => sum + p.total, 0);
+  const realtimeEmp = partitions.reduce((sum, p) => sum + p.Employee, 0);
+  const realtimeCont = partitions.reduce((sum, p) => sum + p.Contractor, 0);
+
+  // 4) Regions of interest
+  const pune = partitions.find(p => p.name === 'Pune');
+  const quezonCity = partitions.find(p => p.name === 'Quezon City');
+  const combinedRegions = partitions.filter(p =>
+    ['JP.Tokyo', 'MY.Kuala Lumpur', 'Taguig City','IN.HYD'].includes(p.name)
+  );
+
+  // 5) Pie chart data
+  // const quezonData = useMemo(() => [
+  //   { name: 'Employees', value: quezonCity?.Employee || 0 },
+  //   { name: 'Contractors', value: quezonCity?.Contractor || 0 }
+  // ], [quezonCity?.Employee, quezonCity?.Contractor]);
+
+
+  const asiaPacData = useMemo(() =>
+    combinedRegions.map(r => ({
+      // name: r.name.replace(/^.*\./, ''),
+      name: displayNameMap[r.name] || r.name.replace(/^.*\./, ''),
+      value: r.total,
+      emp: r.Employee,
+      cont: r.Contractor
+    })),
+    [combinedRegions]
+  );
+
+
+  // 6) Prepare floors + chart configs _before_ any returns
+  // 6a) Get only real floors (drop any that came back Unmapped/"Out of office")
+  const floors = Object.entries(pune?.floors || {})
+    .filter(([floorName, _count]) => floorName !== 'Unmapped');
+
+  const puneChartData = useMemo(() => {
+    // Map only the filtered floors; no Unknown bucket needed
+    return floors.map(([f, headcount]) => {
+      // first try Pune-specific capacity, else global
+      const puneKey = `${f} (Pune)`;
+      const capacity =
+        floorCapacities[puneKey] != null
+          ? floorCapacities[puneKey]
+          : buildingCapacities[f] || 0;
+
+      return {
+        name: f,
+        headcount,
+        capacity
+      };
+    });
+  }, [floors]);
+
+
+
+  const chartConfigs = useMemo(() => {
+    return [
+      {
+        key: 'pune',
+        title: 'Pune',
+        body: pune?.total === 0
+          ? (
+            <Typography color="white" align="center" py={6}>
+              No Pune data
+            </Typography>
+          )
+          : (
+            <CompositeChartCard
+
+              data={puneChartData}
+
+              lineColor={palette15[0]}
+              height={250}
+              sx={{ border: 'none' }}
+            />
+          )
+      },
+
+      {
+        key: 'quezon',
+        title: 'Quezon City',
+        body: quezonCity?.total === 0
+          ? (
+            <Typography color="white" align="center" py={6}>
+              No Quezon City data
+            </Typography>
+          )
+          : (
+
+            <CompositeChartCard
+              title=""
+              data={[
+                {
+                  name: "Quezon City (6thFloor)",
+                  headcount: data?.realtime?.["Quezon City"]?.floors?.["6th Floor"] ?? 0,
+                  capacity: buildingCapacities?.["Quezon City (6thFloor)"] ?? 0,
+                },
+                {
+                  name: "Quezon City (7thFloor)",
+                  headcount: data?.realtime?.["Quezon City"]?.floors?.["7th Floor"] ?? 0,
+                  capacity: buildingCapacities?.["Quezon City (7thFloor)"] ?? 0,
+                },
+              ]}
+
+              lineColor={palette15[1]}
+              height={250}
+              sx={{ border: 'none' }}
+            />
+          )
+      },
+      {
+        key: 'combined',
+        title: 'Asia-Pacific',
+        body: combinedRegions.length === 0
+          ? (
+            <Typography color="white" align="center" py={6}>
+              No regional data
+            </Typography>
+          )
+          : (
+            <PieChartCard
+              data={asiaPacData}
+              colors={['#FFBF00', '#FFFAA0', '#B4C424']}
+              height={320}
+              showZeroSlice
+              sx={{ border: 'none' }}
+            />
+          )
+      }
+    ];
+  }, [
+    floors,
+    pune?.total,
+    quezonCity?.floors?.["6th Floor"],
+    quezonCity?.floors?.["7th Floor"],
+    combinedRegions.length,
+    asiaPacData
+  ]);
+
+  // 7) Error state
+  if (error) {
+    return (
+      <Box width="100vw" py={4}>
+        <Typography color="error" align="center">
+          Error loading live data
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Box
         sx={{
-          background: 'linear-gradient(90deg, #111, #222)',
-          px: isMobile ? 1 : 2,
-          py: isMobile ? 0.5 : 0,
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          bgcolor: 'rgba(0, 0, 0, 0.85)',
+          zIndex: 9999,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
       >
-        <Toolbar
-          disableGutters
+        <LoadingSpinner />
+      </Box>
+    );
+  }
+
+
+  // 8) Render
+  
+   return (
+    <>
+      <Header title="APAC Live Occupancy" />
+      <Container
+        maxWidth={false}
+        disableGutters
+        sx={{
+          py: 0,
+          px: { xs: 1, sm: 2, md: 3, lg: 4 },
+          background: 'linear-gradient(135deg, #0f0f0f 0%, #1c1c1c 100%)',
+          color: '#f5f5f5',
+        }}
+      >
+        {/* Top Summary Cards */}
+        <Box
+          display="flex"
+          flexWrap="wrap"
+          gap={1}
+          mb={1}
           sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            // On xs: 1 column; sm: 2 columns-ish; md+: show 6 across if space
+            '& > div': {
+              flex: {
+                xs: '1 1 100%',
+                sm: '1 1 calc(50% - 8px)',
+                md: '1 1 calc(33.333% - 12px)',
+                lg: '1 1 calc(16.66% - 12px)'
+              },
+              minWidth: {
+                xs: '100%',
+                sm: '220px',
+                md: '220px',
+                lg: '180px'
+              }
+            }
           }}
         >
-          {/* Left: Logo + Title */}
-          <Box display="flex" alignItems="center" sx={{ gap: 1 }}>
-            <Box component="img" src={wuLogo} alt="WU" border='1' sx={{ height: isMobile ? 28 : 36, border: '1px solid black' }} />
-            {!isMobile && (
-              <Typography
-                variant={isTablet ? 'h6' : 'h5'}
-                sx={{ color: '#FFC107', fontWeight: 600, ml: 1 }}
-              >
-                APAC Occupancy
-                {currentPartition && ` • ${displayNameMap[currentPartition] || currentPartition}`}
-              </Typography>
-            )}
-          </Box>
-
-          {/* Right Section */}
-          {isMobile ? (
-            <IconButton color="inherit" onClick={() => setDrawerOpen(true)}>
-              <MenuIcon />
-            </IconButton>
-          ) : (
-            <Box display="flex" alignItems="center" gap={2}>
-              {/* Icons with tooltips */}
-              
-              <Box display="flex" alignItems="center" gap={1.5}>
-                {navItems.map((item, idx) => (
-                  <Tooltip
-                    key={idx}
-                    title={
-                      <Typography sx={{ fontSize: '0.9rem', fontWeight: 500 }}>
-                        {item.label}
-                      </Typography>
-                    }
-                    arrow
-                    placement="bottom"
-                  >
-                    <IconButton color="inherit" onClick={item.action}>
-                      {React.cloneElement(item.icon, { fontSize: 'medium' })}
-                    </IconButton>
-                  </Tooltip>
-                ))}
-              </Box>
-
-              {/* Selector */}
-              <Select
-                size={isTablet ? 'small' : 'medium'}
-                value={selectedPartition}
-                displayEmpty
-                onChange={(e) => handlePartitionChange(e.target.value)}
+          {[
+            { title: "Today's Total Headcount", value: todayTot, icon: <i className="fa-solid fa-users" style={{ fontSize: 25, color: '#FFB300' }} />, border: '#FFB300' },
+            { title: "Today's Employees Count", value: todayEmp, icon: <i className="bi bi-people" style={{ fontSize: 25, color: '#EF5350' }} />, border: '#8BC34A' },
+            { title: "Today's Contractors Count", value: todayCont, icon: <i className="fa-solid fa-circle-user" style={{ fontSize: 25, color: '#8BC34A' }} />, border: '#E57373' },
+            { title: "Realtime Headcount", value: realtimeTot, icon: <i className="fa-solid fa-users" style={{ fontSize: 25, color: '#FFB300' }} />, border: '#FFD180' },
+            { title: "Realtime Employees Count", value: realtimeEmp, icon: <i className="bi bi-people" style={{ fontSize: 25, color: '#EF5350' }} />, border: '#AED581' },
+            { title: "Realtime Contractors Count", value: realtimeCont, icon: <i className="fa-solid fa-circle-user" style={{ fontSize: 25, color: '#8BC34A' }} />, border: '#EF5350' },
+          ].map(c => (
+            <Box key={c.title} sx={{}}>
+              <SummaryCard
+                title={c.title}
+                total={c.value}
+                stats={[]}
+                icon={c.icon}
                 sx={{
-                  bgcolor: '#fff',
-                  color: '#000',
-                  borderRadius: 1,
-                  minWidth: 160,
-                  fontSize: '0.9rem',
-                  height: 40,
+                  height: { xs: 130, sm: 130, md: 150 },
+                  border: `2px solid ${c.border}`,
+                  px: { xs: 1, sm: 1.5 },
+                  py: { xs: 1, sm: 1.5 }
                 }}
-
-                renderValue={(selected) =>
-                  selected ? (
-                    <Box display="flex" alignItems="center">
-                      <Box
-                        component="img"
-                        src={flagMap[selected]}
-                        alt={selected}
-                        sx={{
-                          width: 22,
-                          height: 15,
-                          mr: 1,
-                          border: '1px solid #6a6868ff', // ✅ adds visible border
-                          
-                          objectFit: 'cover',
-                        }}
-                      />
-                      {displayNameMap[selected] || selected}
-                    </Box>
-                  ) : '— Select Site —'
-                }
-
-              >
-                <MenuItem value="">— Select Site —</MenuItem>
-                {partitionList.map((p) => (
-                  <MenuItem key={p} value={p}>
-                    {displayNameMap[p] || p}
-                  </MenuItem>
-                ))}
-              </Select>
+                titleSx={{ fontSize: { xs: '0.85rem', sm: '0.95rem', md: '1rem' } }}
+                numberSx={{ fontSize: { xs: '1.15rem', sm: '1.4rem', md: '1.6rem' } }}
+              />
             </Box>
-          )}
-        </Toolbar>
-      </AppBar>
+          ))}
+        </Box>
 
-      {/* MOBILE DRAWER (unchanged) */}
-      <Drawer
-        anchor="right"
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        PaperProps={{ sx: { width: 260, background: '#111', color: '#fff' } }}
-      >
-        <Box sx={{ p: 2 }}>
-          <Box display="flex" justifyContent="flex-end">
-            <IconButton onClick={() => setDrawerOpen(false)} sx={{ color: '#FFC107' }}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          <Box display="flex" alignItems="center" mb={2}>
-            <Box component="img" src={wuLogo} alt="WU" sx={{ height: 30, mr: 1 }} />
-            <Typography variant="h6" sx={{ color: '#FFC107' }}>
-              APAC Occupancy
-            </Typography>
-          </Box>
-          <List>
-            {navItems.map((item, i) => (
-              <ListItemButton key={i} onClick={() => { item.action(); setDrawerOpen(false); }}>
-                <ListItemIcon sx={{ color: '#FFC107' }}>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.label} />
-              </ListItemButton>
-            ))}
-          </List>
-          <Box mt={2}>
-            <Typography variant="body2" sx={{ mb: 1, color: '#FFC107' }}>
-              Select Site
-            </Typography>
-            <Select
-              fullWidth
-              size="small"
-              value={selectedPartition}
-              displayEmpty
-              onChange={(e) => handlePartitionChange(e.target.value)}
-              sx={{
-                bgcolor: '#fff',
-                color: '#000',
-                borderRadius: 1,
-                fontSize: '0.85rem',
-              }}
-              renderValue={(selected) =>
-                selected ? (
-                  <Box display="flex" alignItems="center">
+        
+        {/* Region Cards */}
+        <Box
+          display="flex"
+          flexWrap="wrap"
+          gap={1}
+          mb={3}
+          sx={{
+            '& > div': {
+              flex: {
+                xs: '1 1 100%',
+                sm: '1 1 calc(50% - 8px)',
+                md: '1 1 calc(33.333% - 12px)',
+                lg: '1 1 calc(16.66% - 12px)'
+              },
+              minWidth: {
+                xs: '100%',
+                sm: '240px',
+                md: '240px',
+                lg: '180px'
+              }
+            }
+          }}
+        >
+          {loading ? (
+            <Skeleton variant="rectangular" width="90%" height={200} />
+          ) : (
+            partitions.map((p, i) => (
+              <Box key={p.name}>
+                <SummaryCard
+                  title={
+                    <Typography
+                      variant="subtitle1"
+                      sx={{
+                        fontWeight: 'bold',
+                        color: '#FFC107',
+                        fontSize: { xs: '1rem', sm: '1.05rem', md: '1.1rem' }
+                      }}
+                    >
+                      {displayNameMap[p.name] || p.name.replace(/^.*\./, '')}
+                    </Typography>
+                  }
+                  total={p.total}
+                  stats={[
+                    { label: 'Employees', value: p.Employee },
+                    { label: 'Contractors', value: p.Contractor }
+                  ]}
+                  sx={{
+                    width: '100%',
+                    border: `2px solid ${palette15[i % palette15.length]}`,
+                    // ✅ Increased heights and enabled content wrapping
+                    height: { xs: 180, sm: 188, md: 185, lg: 190 },
+                    px: { xs: 1, sm: 1.5 },
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    overflow: 'visible'
+                  }}
+                  icon={
                     <Box
                       component="img"
-                      src={flagMap[selected]}
-                      alt={selected}
-                      sx={{ width: 20, height: 14, mr: 1 }}
+                      src={p.flag}
+                      sx={{ width: { xs: 40, sm: 48 }, height: { xs: 26, sm: 32 } }}
                     />
-                    {displayNameMap[selected] || selected}
-                  </Box>
-                ) : '— Select Site —'
-              }
-            >
-              <MenuItem value="">— Select Site —</MenuItem>
-              {partitionList.map((p) => (
-                <MenuItem key={p} value={p}>
-                  {displayNameMap[p] || p}
-                </MenuItem>
-              ))}
-            </Select>
-          </Box>
+                  }
+                />
+              </Box>
+            ))
+          )}
         </Box>
-      </Drawer>
+        {/* Main Charts */}
+        <Box
+          display="flex"
+          gap={2}
+          flexWrap="wrap"
+          mb={4}
+          sx={{
+            // prefer 3 across on large, 2 across on md, 1 across on small
+            '& > div': {
+              flex: {
+                xs: '1 1 100%',
+                sm: '1 1 calc(50% - 8px)',
+                md: '1 1 calc(50% - 12px)',
+                lg: '1 1 calc(33.333% - 12px)'
+              },
+              minWidth: { xs: '100%', sm: '320px', md: '360px', lg: '320px' },
+              height: { xs: 'auto', sm: 420, md: 405 }
+            }
+          }}
+        >
+          {chartConfigs.map(({ key, title, body }) => (
+            <Box key={key} sx={{ display: 'flex', flexDirection: 'column' }}>
+              <Paper sx={{ p: { xs: 1, sm: 2 }, height: '100%', background: 'rgba(0,0,0,0.4)', border: '1px solid #FFC107', display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="h6" align="center" sx={{ color: '#FFC107', mb: 1, fontSize: { xs: '1rem', sm: '1.05rem', md: '1.15rem' } }}>{title}</Typography>
+                <Box sx={{ flex: 1, overflow: 'hidden', minHeight: { xs: 220, sm: 260, md: 260 } }}>{body}</Box>
+              </Paper>
+            </Box>
+          ))}
+        </Box>
+      </Container>
+      <Footer />
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

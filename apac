@@ -1,4 +1,16 @@
-  const handleExport = async () => {
+  // Proper column-to-letter helper (supports >26 columns)
+const colLetter = (col) => {
+  let letter = '';
+  while (col > 0) {
+    let rem = (col - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    col = Math.floor((col - 1) / 26);
+  }
+  return letter;
+};
+
+
+const handleExport = async () => {
     if (!pickedDate) return;
 
     try {

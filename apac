@@ -1,1925 +1,281 @@
-// src/controllers/occupancy.controller.js
-const service = require('../services/occupancy.service');
 
-const {
-  doorMap,
-  normalizedDoorZoneMap,
-  doorZoneMap,
-  zoneFloorMap,
-  normalizeDoorName
-} = require('../utils/doorMap');
+// C:\Users\W0024618\Desktop\apac-occupancy-frontend\src\components\Header.jsx
+import React, { useEffect, useState } from 'react';
+import {
+  AppBar, Toolbar, Box, Typography,
+  Select, MenuItem, IconButton, Drawer, List, ListItemButton, ListItemIcon, ListItemText, Tooltip, useMediaQuery
+} from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { useNavigate, useLocation } from 'react-router-dom';
 
+import MenuIcon from '@mui/icons-material/Menu';
+import HomeIcon from '@mui/icons-material/Home';
+import HistoryIcon from '@mui/icons-material/History';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import CloseIcon from '@mui/icons-material/Close';
 
-function isEmployeeType(pt) {
-  return ['Employee','Terminated Employee','Terminated Personnel'].includes(pt);
-}
+import wuLogo from '../assets/images/wu-logo.png';
+import IndiaFlag from '../assets/flags/india.png';
+import MalaysiaFlag from '../assets/flags/malaysia.png';
+import PhilippinesFlag from '../assets/flags/philippines.png';
+import JapanFlag from '../assets/flags/japan.png';
+import HYDFlag from '../assets/flags/india.png';
 
-/**
- * Resolve floor for a given partition + raw door + direction.
- * - Uses normalizedDoorZoneMap first -> zoneFloorMap lookup
- * - Falls back to per-partition doorMap entries
- * - If nothing matches, records to `unmapped` and returns 'Unknown'
- */
-function lookupFloor(partition, rawDoor, direction, unmapped) {
-  const norm = normalizeDoorName(rawDoor);
-  const key  = `${norm}___${direction}`;
+import { partitionList } from '../services/occupancy.service';
+import { useLiveOccupancy } from '../hooks/useLiveOccupancy';
 
-  // 1) Try normalized lookup
-  const zone = normalizedDoorZoneMap[key];
-  if (zone) {
-    const f = zoneFloorMap[zone];
-    // if zone has a known floor -> return it
-    if (f) return f;
-    // zone exists but has no floor (e.g. "Out of office") -> treat as known but Unknown floor
-    // return immediately to avoid falling back to per-partition doorMap and marking as unmapped
-    return 'Unknown';
-  }
-
-  // 2) Fallback to per-partition doorMap
-  const entry = doorMap.find(d =>
-    d.normalizedDoor === norm && d.partition === partition
-  );
-  if (entry) {
-    const fl = direction === 'InDirection'
-      ? entry.inDirectionFloor
-      : entry.outDirectionFloor;
-    if (fl) return fl;
-  }
-
-  // 3) Nothing matched → record & return Unknown
-  unmapped.add(`${partition}|${rawDoor}`);
-  return 'Unknown';
-}
-
-
-/**
- * Resolve a human-friendly Zone for a door+direction.
- * Returns:
- *  - actual zone string (e.g. 'Tower B', 'Yellow Zone', 'Reception Area', ...)
- *  - 'Unknown Zone' when nothing maps
- *  - retains 'Out of office' when mapped
- *
- * For OutDirection we remove trailing " Zone" when appropriate (but keep "Out of office" as-is).
- */
-function mapDoorToZone(rawDoor, rawDir) {
-  const key = normalizeDoorName(rawDoor) + '___' + (rawDir === 'InDirection' ? 'InDirection' : 'OutDirection');
-  const zone = normalizedDoorZoneMap[key];
-  if (!zone) return 'Unknown Zone';
-  // for OutDirection that aren’t true “Out of office”, strip trailing “ Zone”
-  if (rawDir === 'OutDirection' && zone !== 'Out of office') {
-    return zone.replace(/\s+Zone$/i, '');
-  }
-  return zone;
-}
-
-
-
-exports.getLiveOccupancy = async (req,res) => {
-  try {
-    const data = await service.fetchLiveOccupancy();
-    res.json({ success:true, count:data.length, data });
-  } catch(e) {
-    console.error(e);
-    res.status(500).json({ success:false, message:'Live fetch failed' });
-  }
+const displayNameMap = {
+  'IN.Pune': 'Pune',
+  'MY.Kuala Lumpur': 'Kuala Lumpur',
+  'PH.Quezon': 'Quezon City',
+  'PH.Taguig': 'Taguig',
+  'JP.Tokyo': 'Tokyo',
+  'IN.HYD': 'Hyderabad',
 };
 
-
-
-exports.getLiveSummary = async (req,res) => {
-  try {
-    const swipes = await service.fetchLiveOccupancy();
-
-    // first swipe per person = TODAY (dedupe to first swipe)
-    const first = {};
-    swipes.forEach(r => {
-      const t = new Date(r.LocaleMessageTime).getTime();
-      if (!first[r.PersonGUID] || t < new Date(first[r.PersonGUID].LocaleMessageTime).getTime()) {
-        first[r.PersonGUID] = r;
-      }
-    });
-    const today = { total:0, Employee:0, Contractor:0 };
-    Object.values(first).forEach(r => {
-      today.total++;
-      if (isEmployeeType(r.PersonnelType)) today.Employee++;
-      else today.Contractor++;
-    });
-
-    // last swipe per person for realtime (dedupe to last swipe)
-    const last = {};
-    swipes.forEach(r => {
-      const t = new Date(r.LocaleMessageTime).getTime();
-      if (!last[r.PersonGUID] || t > new Date(last[r.PersonGUID].LocaleMessageTime).getTime()) {
-        last[r.PersonGUID] = r;
-      }
-    });
-
-    const realtime = {};
-    const unmapped = new Set();
-
-    // Build enriched details (add Zone & Floor) for every last-swipe record
-    // Keep Unknown Zone as null, keep actual zone strings (including "Out of office").
-    const enriched = Object.values(last).map(r => {
-      // determine zone (try normalized lookup + fallback)
-      const zone = mapDoorToZone(r.Door, r.Direction);
-
-      // lookupFloor returns 'Unknown' for unmapped (and adds to unmapped set)
-      const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmapped);
-
-      return {
-        ...r,
-        // null for unknown zone (makes filtering explicit), keep "Out of office" literal
-        Zone: zone === 'Unknown Zone' ? null : zone,
-        // convert server-side 'Unknown' -> null so client clearly sees "no floor"
-        Floor: floor === 'Unknown' ? null : floor
-      };
-    });
-
-    // Strictly remove "Out of office" records from details (and from counting below)
-    // This ensures any door mapped to "Out of office" is NOT counted anywhere.
-    const details = enriched.filter(r => r.Zone !== 'Out of office');
-
-    // ---- Counting loop: use 'details' as the single source of truth ----
-    // This prevents divergence between the details view and realtime totals.
-    details.forEach(r => {
-      // skip unknown/ unmapped zones entirely (they were converted to null)
-      if (!r.Zone) return;
-
-      const p = r.PartitionName2 || 'UnknownPartition';
-
-      // ensure bucket
-      if (!realtime[p]) realtime[p] = { total:0, Employee:0, Contractor:0, floors:{}, zones:{} };
-
-      // increment totals
-      realtime[p].total++;
-      if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-      else                                  realtime[p].Contractor++;
-
-      // floor bucket: prefer server-computed Floor, otherwise attempt lookupFloor fallback
-      let fl = r.Floor;
-      if (!fl) {
-        const maybe = lookupFloor(p, r.Door, r.Direction, unmapped);
-        fl = maybe === 'Unknown' ? null : maybe;
-      }
-      if (fl) {
-        realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
-      }
-
-      // zone bucket: for OutDirection we already stripped trailing " Zone" in mapDoorToZone,
-      // and we have filtered out "Out of office" earlier, so safe to count the zone string.
-      const z = r.Zone;
-      if (z) {
-        realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
-      }
-    });
-
-    // Log to server console for quick dev feedback:
-    if (unmapped.size) console.warn('Unmapped doors:', Array.from(unmapped));
-
-    res.json({
-      success:    true,
-      today,
-      realtime,
-      // expose the raw list of partition|door keys that had no mapping:
-      unmapped:   Array.from(unmapped),
-      details    // enriched details with Zone & Floor, "Out of office" removed
-    });
-
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success:false, message:'Summary failed' });
-  }
+const flagMap = {
+  'Pune': IndiaFlag,
+  'MY.Kuala Lumpur': MalaysiaFlag,
+  'Quezon City': PhilippinesFlag,
+  'Taguig City': PhilippinesFlag,
+  'JP.Tokyo': JapanFlag,
+  'IN.HYD': HYDFlag,
 };
 
+export default function Header() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data } = useLiveOccupancy(1000);
+  const [lastUpdate, setLastUpdate] = useState('');
+  const [selectedPartition, setSelectedPartition] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'lg'));
 
+  useEffect(() => {
+    if (data) setLastUpdate(new Date().toLocaleTimeString());
+  }, [data]);
 
-// Historical occupancy (unchanged logic, kept here for completeness)
-exports.getHistoricalOccupancy = async (req, res) => {
-  const location = req.params.location || null;
-  try {
-    // 1) Pull in rows — each now has non-null PartitionNameFriendly
-    const raw = await service.fetchHistoricalOccupancy(location);
+  // Routing setup
+  const parts = location.pathname.split('/').filter(Boolean);
+  const isPartitionPath = parts[0] === 'partition' && Boolean(parts[1]);
+  const currentPartition = isPartitionPath ? decodeURIComponent(parts[1]) : '';
+  const suffixSegments = isPartitionPath
+    ? parts.slice(2)
+    : parts[0] === 'history'
+      ? ['history']
+      : [];
 
-    // 2) Dedupe to first swipe per person per day
-    const byDate = raw.reduce((acc, r) => {
-      // force into a "YYYY-MM-DD" string
-      const date = new Date(r.LocaleMessageTime).toISOString().slice(0, 10);
-      acc[date] = acc[date] || {};
-      if (
-        !acc[date][r.PersonGUID] ||
-        new Date(r.LocaleMessageTime) < new Date(acc[date][r.PersonGUID].LocaleMessageTime)
-      ) {
-        acc[date][r.PersonGUID] = r;
-      }
-      return acc;
-    }, {});
+  useEffect(() => {
+    setSelectedPartition(currentPartition);
+  }, [currentPartition]);
 
-    const summaryByDate = [];
-    const details = [];
-
-    // 3) Build summaries
-    Object.keys(byDate).sort().forEach(date => {
-      const recs = Object.values(byDate[date]);
-      details.push(...recs);
-
-      // region totals
-      const region = { total: 0, Employee: 0, Contractor: 0 };
-      // per-partition buckets
-      const partitions = {};
-
-      recs.forEach(r => {
-        // increment region
-        region.total++;
-        if (isEmployeeType(r.PersonnelType)) region.Employee++;
-        else region.Contractor++;
-
-        // only build partitions if we're not filtering to a single location
-        if (!location) {
-          // use the friendly name (guaranteed non-null!), with fallback
-          const key = r.PartitionNameFriendly || 'APAC.Default';
-          if (!partitions[key]) {
-            partitions[key] = { total: 0, Employee: 0, Contractor: 0 };
-          }
-          partitions[key].total++;
-          if (isEmployeeType(r.PersonnelType)) partitions[key].Employee++;
-          else partitions[key].Contractor++;
-        }
-      });
-
-      summaryByDate.push({
-        date,
-        day: new Date(date).toLocaleDateString('en-US', { weekday: 'long' }),
-        region: location
-          ? { name: location, ...region }
-          : { name: 'APAC', ...region },
-        partitions: location ? {} : partitions
-      });
-    });
-
-    // 4) Return
-    res.json({ success: true, summaryByDate, details });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: 'Historical failed' });
-  }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ===== REPLACE THE OLD "Counting loop ..." BLOCK WITH THIS =====
-
-// Counting loop — use 'details' (enriched & already filtered) as the single source of truth
-const ensureBucket = (part) => {
-  if (!realtime[part]) realtime[part] = { total:0, Employee:0, Contractor:0, floors:{}, zones:{} };
-};
-
-details.forEach(r => {
-  const p = r.PartitionName2;
-
-  // details already filtered to remove "Out of office"; skip Unknown/Unmapped zones
-  if (!r.Zone) return;
-
-  ensureBucket(p);
-
-  // totals
-  realtime[p].total++;
-  if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-  else                                  realtime[p].Contractor++;
-
-  // floor: prefer enriched Floor, otherwise fallback to lookupFloor
-  let fl = r.Floor;
-  if (!fl) {
-    const lf = lookupFloor(p, r.Door, r.Direction, unmapped);
-    if (lf !== 'Unknown') fl = lf;
-  }
-  if (fl && fl !== 'Unknown') {
-    realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
-  }
-
-  // zone: mapDoorToZone already normalized the zone during enrichment.
-  // For OutDirection ensure trailing " Zone" is stripped (if any)
-  let z = r.Zone;
-  if (r.Direction === 'OutDirection' && z && z !== 'Out of office') {
-    z = z.replace(/\s+Zone$/i, '');
-  }
-  if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
-});
-
-
-
-
-
-
-
-
-
-
-
-
-// ---- inside exports.getLiveSummary = async (req,res) => { ... } ----
-
-// Build enriched details (add Zone & Floor) for every last-swipe record
-const enriched = Object.values(last).map(r => {
-  const zone = mapDoorToZone(r.Door, r.Direction);
-  const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmapped);
-
-  return {
-    ...r,
-    Zone: zone === 'Unknown Zone' ? null : zone,
-    Floor: floor === 'Unknown' ? null : floor
-  };
-});
-
-// We'll collect only the PersonGUIDs that actually got counted into realtime
-const included = new Set();
-
-// Counting loop (keeps Pune special logic but enforces strict drop on "Out of office")
-Object.values(last).forEach(r => {
-  const p = r.PartitionName2;
-
-  // determine zone again for each record (use mapDoorToZone to be consistent)
-  const zoneRaw = mapDoorToZone(r.Door, r.Direction);
-
-  // STRICT RULE: if zone resolved to exact "Out of office" -> skip counting
-  if (zoneRaw === 'Out of office') return;
-
-  // Unknown keys → drop
-  if (zoneRaw === 'Unknown Zone') return;
-
-  // ensure bucket exists when we decide to count
-  const ensureBucket = (part) => {
-    if (!realtime[part]) realtime[part] = { total:0, Employee:0, Contractor:0, floors:{}, zones:{} };
+  const makePartitionPath = (suffix) => {
+    const base = `/partition/${encodeURIComponent(currentPartition)}`;
+    return suffix ? `${base}/${suffix}` : base;
   };
 
-  if (r.Direction === 'OutDirection') {
-    // allow certain valid OutDirection zones (Assembly Area, Reception Area, ...)
-    const allowedOutZones = new Set(['Assembly Area', 'Reception Area']);
-    if (!zoneRaw.endsWith('Outer Area') && !allowedOutZones.has(zoneRaw)) {
+  const handlePartitionChange = (newPartition) => {
+    if (!newPartition) return navigate('/');
+    setSelectedPartition(newPartition);
+    if (newPartition === 'Pune' && suffixSegments.length === 0) {
+      window.location.href = 'http://10.199.22.57:3011/';
       return;
     }
 
-    // safe to count
-    ensureBucket(p);
-    realtime[p].total++;
-    if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-    else                                  realtime[p].Contractor++;
-
-    // floor bucket
-    const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
-    if (fl !== 'Unknown') {
-      realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
-    }
-
-    // zone bucket (clean trailing " Zone" for OutDirection cases where appropriate)
-    const z = (r.Direction === 'OutDirection' && zoneRaw !== 'Out of office')
-                ? zoneRaw.replace(/\s+Zone$/i, '')
-                : zoneRaw;
-    if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
-
-    // mark this person as included in realtime counts
-    included.add(r.PersonGUID);
-
-    return;
-  }
-
-  // ── All other partitions (existing logic) ──
-  const normKey = normalizeDoorName(r.Door) + '___' + r.Direction;
-  let zone = normalizedDoorZoneMap[normKey];
-  if (!zone) {
-    const entry = doorMap.find(d =>
-      d.normalizedDoor === normalizeDoorName(r.Door) &&
-      d.partition === p
-    );
-    zone = entry
-      ? (r.Direction === 'InDirection'
-          ? normalizedDoorZoneMap[`${entry.normalizedDoor}___InDirection`]
-          : normalizedDoorZoneMap[`${entry.normalizedDoor}___OutDirection`])
-      : null;
-  }
-
-  // if resolved zone (via fallback) is "Out of office" → skip (strict)
-  if (zone === 'Out of office') return;
-
-  // ok to count
-  ensureBucket(p);
-  realtime[p].total++;
-  if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-  else                                  realtime[p].Contractor++;
-
-  const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
-  if (fl !== 'Unknown') {
-    realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
-  }
-
-  const z = zone ? (r.Direction === 'OutDirection' && zone !== 'Out of office' ? zone.replace(/\s+Zone$/i, '') : zone) : null;
-  if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
-
-  // mark this person as included
-  included.add(r.PersonGUID);
-});
-
-// Build details to exactly match who we counted in realtime
-const details = enriched.filter(r => included.has(r.PersonGUID));
-
-
-
-
-
-
-
-
-
-
-// 1) Filter the raw details → keep only In/Out for this partition,
-//    map to include floor, then drop any that resolve to "Unmapped"/"Unknown"/null
-const filterAndMap = json =>
-  (json.details || [])
-    .filter(r =>
-      r.PartitionName2 === partition &&
-      (r.Direction === "InDirection" || r.Direction === "OutDirection")
-    )
-    .map(r => {
-      // reuse frontend lookupFloor utility to compute display floor
-      const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction);
-      return { ...r, floor };
-    })
-    // normalize: drop entries where floor is null/undefined/Unknown/Unmapped
-    .filter(r => r.floor && r.floor !== "Unknown" && r.floor !== "Unmapped");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-In APAC Dashboard Quezon City 6th floor and 7th Floor and In Pune Tower b 
-Display mismatch count need to fix .
-Debug each Code line by line and fix the issue carefully..
-
-
-http://10.199.22.57:3008/api/occupancy/live-summary
-in API 
-  "success": true,
-  "today": {
-    "total": 838,
-    "Employee": 713,
-    "Contractor": 125
-  },
-  "realtime": {
-    "Quezon City": {
-      "total": 78,
-      "Employee": 68,
-      "Contractor": 10,
-      "floors": {
-        "7th Floor": 53,
-        "6th Floor": 25
-      },
-      "zones": {
-        "7th Floor": 53,
-        "6th Floor": 25
-      }
-    },
-    "Pune": {
-      "total": 132,
-      "Employee": 102,
-      "Contractor": 30,
-      "floors": {
-        "Podium Floor": 102,
-        "2nd Floor": 10,
-        "Tower B": 20
-      },
-      "zones": {
-        "Reception Area": 14,
-        "2nd Floor, Pune": 10,
-        "Red Zone": 20,
-        "Tower B GYM": 4,
-        "Tower B": 16,
-        "Orange Zone": 20,
-        "Yellow Zone": 22,
-        "Green Zone": 20,
-        "Yellow Zone - Outer Area": 5,
-        "Red Zone - Outer Area": 1
-      }
-    },
-
-
-
-lets check same Time In Live-summary API display "Tower B": 20 Count in Dashboard and  in same tine http://10.199.22.57:3000/partition/Pune/details  in details Section Tower B (Total 24) display 24 count
-this need to fix issue carefully
-
-http://10.199.22.57:3000/partition/Pune/details
-
-Tower B (Total 24)
-
-
-
-Same issue for QUEZON city 6th floor and 7th floor got Wrong count checck each below file related to APAC dashboard and Fix the issue carefully..
-http://10.199.22.57:3000/partition/Quezon%20City/details
-
-7th Floor (Total 55)
-
-6th Floor (Total 30)
-
-
-
-
-
-
-D:\DASHBOARD\apac-occupancy-backend\src\services\occupancy.service.js
-
-
-//C:\Users\W0024618\Desktop\apac-occupancy-backend\src\services\occupancy.service.js
-
-const { poolPromise, sql } = require('../config/db');
-
-const partitionList = [
-  'APAC.Default',
-  'CN.Beijing',
-  'JP.Tokyo',
-  'PH.Manila',
-  'MY.Kuala Lumpur',
-  'IN.Pune'
-];
-
-function quoteList(arr) {
-  return arr.map(p => `'${p.replace("'", "''")}'`).join(',');
-}
-
-/**
- * Live occupancy (today) for APAC
- */
-exports.fetchLiveOccupancy = async () => {
-  const pool = await poolPromise;
-  const parts = quoteList(partitionList);
-
-  const query = `
-    WITH CombinedEmployeeData AS (
-      SELECT
-        t1.ObjectName1,
-        t1.ObjectName2             AS Door,               -- include Door
-        CASE WHEN t2.Int1 = 0 THEN t2.Text12 ELSE CAST(t2.Int1 AS NVARCHAR) END AS EmployeeID,
-        t3.Name                    AS PersonnelType,
-        t1.ObjectIdentity1         AS PersonGUID,
-      t2.Text4                   AS CompanyName,   -- ✅ company
-        t2.Text5                   AS PrimaryLocation, -- ✅ location         
-
-        -- extract CardNumber from XML or shred table
-        COALESCE(
-          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
-          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
-          sc.value
-        )                          AS CardNumber,
-        CASE
-          WHEN t1.ObjectName2 LIKE 'APAC_PI%' THEN 'Taguig City'
-          WHEN t1.ObjectName2 LIKE 'APAC_PH%' THEN 'Quezon City'
-          WHEN t1.ObjectName2 LIKE '%PUN%'   THEN 'Pune'
-          WHEN t1.ObjectName2 LIKE 'APAC_JPN%' THEN 'JP.Tokyo'
-          WHEN t1.ObjectName2 LIKE 'APAC_MY%'  THEN 'MY.Kuala Lumpur'
-          ELSE t1.PartitionName2
-        END                        AS PartitionName2,
-        DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
-        t5d.value                  AS Direction
-      FROM ACVSUJournal_00010029.dbo.ACVSUJournalLog t1
-      JOIN ACVSCore.Access.Personnel       t2 ON t1.ObjectIdentity1 = t2.GUID
-      JOIN ACVSCore.Access.PersonnelType   t3 ON t2.PersonnelTypeID = t3.ObjectID
-      LEFT JOIN ACVSUJournal_00010029.dbo.ACVSUJournalLogxmlShred t5d
-        ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
-      LEFT JOIN ACVSUJournal_00010029.dbo.ACVSUJournalLogxml t_xml
-        ON t1.XmlGUID = t_xml.GUID
-      LEFT JOIN (
-        SELECT GUID, value
-        FROM ACVSUJournal_00010029.dbo.ACVSUJournalLogxmlShred
-        WHERE Name IN ('Card','CHUID')
-      ) AS sc
-        ON t1.XmlGUID = sc.GUID
-      WHERE
-        t1.MessageType = 'CardAdmitted'
-        AND t1.PartitionName2 IN (${parts})
-        AND CONVERT(DATE, DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC))
-            = CONVERT(DATE, GETDATE())
-    ), Ranked AS (
-      SELECT *,
-        ROW_NUMBER() OVER (PARTITION BY PersonGUID ORDER BY LocaleMessageTime DESC) AS rn
-      FROM CombinedEmployeeData
-    )
-    SELECT
-      ObjectName1,
-      Door,                            -- door
-      PersonnelType,
-      EmployeeID,
-      CardNumber,                      -- now returned
-      PartitionName2,
-      LocaleMessageTime,
-      Direction,
-      PersonGUID,
-     CompanyName,  
-      PrimaryLocation
-    FROM Ranked
-    WHERE rn = 1;
-  `;
-
-  const result = await pool.request().query(query);
-  return result.recordset;
-};
-
-
-
-
-/**
- * Historical raw‐data fetch for the past N days, all or by location.
- */
-
-
-exports.fetchHistoricalData = async ({ days = 7, location = null }) => {
-  const pool = await poolPromise;
-  const parts = quoteList(partitionList);
-
-  // Outer‐query filter based on the alias
-  const outerFilter = location
-    ? `WHERE PartitionNameFriendly = @location`
-    : `WHERE PartitionNameFriendly IN (${quoteList([
-        'Pune','Quezon City','JP.Tokyo','MY.Kuala Lumpur','Taguig City'
-      ])})`;
-
-  const query = `
-    WITH Hist AS (
-      SELECT
-        DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
-        t1.ObjectName1,
-        t1.ObjectName2               AS Door,
-        CASE WHEN t2.Int1 = 0 THEN t2.Text12 ELSE CAST(t2.Int1 AS NVARCHAR) END AS EmployeeID,
-        t3.Name                      AS PersonnelType,
-        t1.ObjectIdentity1           AS PersonGUID,
-
-
- -- **Single** friendly‐name alias, with fallback
-        COALESCE(
-          CASE
-            WHEN t1.ObjectName2 LIKE 'APAC_PI%'   THEN 'Taguig City'
-            WHEN t1.ObjectName2 LIKE 'APAC_PH%'   THEN 'Quezon City'
-            WHEN t1.ObjectName2 LIKE '%PUN%'      THEN 'Pune'
-            WHEN t1.ObjectName2 LIKE 'APAC_JPN%'  THEN 'JP.Tokyo'
-            WHEN t1.ObjectName2 LIKE 'APAC_MY%'   THEN 'MY.Kuala Lumpur'
-            ELSE t1.PartitionName2
-          END,
-          'APAC.Default'
-        )                             AS PartitionNameFriendly,
-
-        -- extract CardNumber
-        COALESCE(
-          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
-          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
-          sc.value
-        )                            AS CardNumber,
-        t5d.value                    AS Direction
-      FROM ACVSUJournal_00010029.dbo.ACVSUJournalLog t1
-      JOIN ACVSCore.Access.Personnel       t2 ON t1.ObjectIdentity1 = t2.GUID
-      JOIN ACVSCore.Access.PersonnelType   t3 ON t2.PersonnelTypeID = t3.ObjectID
-      LEFT JOIN ACVSUJournal_00010029.dbo.ACVSUJournalLogxmlShred t5d
-        ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
-      LEFT JOIN ACVSUJournal_00010029.dbo.ACVSUJournalLogxml t_xml
-        ON t1.XmlGUID = t_xml.GUID
-      LEFT JOIN (
-        SELECT GUID, value
-        FROM ACVSUJournal_00010029.dbo.ACVSUJournalLogxmlShred
-        WHERE Name IN ('Card','CHUID')
-      ) AS sc
-        ON t1.XmlGUID = sc.GUID
-      WHERE
-        t1.MessageType = 'CardAdmitted'
-        -- date filter remains here
-        AND CONVERT(DATE, DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC))
-            >= DATEADD(DAY, -${days}, CONVERT(DATE, GETDATE()))
-    )
-
-    -- now filter by the newly‐defined alias
-    SELECT *
-    FROM Hist
-    ${outerFilter}
-    ORDER BY LocaleMessageTime ASC;
-  `;
-
-  const req = pool.request();
-  if (location) {
-    req.input('location', sql.NVarChar, location);
-  }
-  const result = await req.query(query);
-  return result.recordset;
-};
-
-
-exports.fetchHistoricalOccupancy = async (location) =>
-  exports.fetchHistoricalData({ days: 7, location: location || null });
-
-
-
-
-
-
-
-
-
-
-
-
-//C:\Users\W0024618\Desktop\apac-occupancy-backend\src\controllers\occupancy.controller.js
-
-const service = require('../services/occupancy.service');
-
-const {
-  doorMap,
-  normalizedDoorZoneMap,
-  doorZoneMap,
-  zoneFloorMap,
-  normalizeDoorName
-} = require('../utils/doorMap');
-
-
-function isEmployeeType(pt) {
-  return ['Employee','Terminated Employee','Terminated Personnel'].includes(pt);
-}
-
-function lookupFloor(partition, rawDoor, direction, unmapped) {
-  const norm = normalizeDoorName(rawDoor);
-  const key  = `${norm}___${direction}`;
-
-  // 1) Try normalized lookup
-  const zone = normalizedDoorZoneMap[key];
-  if (zone) {
-    const f = zoneFloorMap[zone];
-    // if zone has a known floor -> return it
-    if (f) return f;
-    // zone exists but has no floor (e.g. "Out of office") -> treat as known but Unknown floor
-    // return immediately to avoid falling back to per-partition doorMap and marking as unmapped
-    return 'Unknown';
-  }
-
-
-  
-
-  // 2) Fallback to per-partition doorMap
-  const entry = doorMap.find(d =>
-    d.normalizedDoor === norm && d.partition === partition
-  );
-  if (entry) {
-    const fl = direction === 'InDirection'
-      ? entry.inDirectionFloor
-      : entry.outDirectionFloor;
-    if (fl) return fl;
-  }
-
-  // 3) Nothing matched → record & return Unknown
-  unmapped.add(`${partition}|${rawDoor}`);
-  return 'Unknown';
-}
-
-
-
-function mapDoorToZone(rawDoor, rawDir) {
-  const key = normalizeDoorName(rawDoor) + '___' + (rawDir === 'InDirection' ? 'InDirection' : 'OutDirection');
-  const zone = normalizedDoorZoneMap[key];
-  if (!zone) return 'Unknown Zone';
-  // for OutDirection that aren’t true “Out of office”, strip trailing “ Zone”
-  if (rawDir === 'OutDirection' && zone !== 'Out of office') {
-    return zone.replace(/\s+Zone$/i, '');
-  }
-  return zone;
-}
-
-
-
-exports.getLiveOccupancy = async (req,res) => {
-  try {
-    const data = await service.fetchLiveOccupancy();
-    res.json({ success:true, count:data.length, data });
-  } catch(e) {
-    console.error(e);
-    res.status(500).json({ success:false, message:'Live fetch failed' });
-  }
-};
-
-
-
-
-// exports.getLiveSummary = async (req,res) => {
-//   try {
-//     const swipes = await service.fetchLiveOccupancy();
-
-//     // first swipe per person = TODAY
-//     const first = {};
-//     swipes.forEach(r => {
-//       const t = new Date(r.LocaleMessageTime).getTime();
-//       if (!first[r.PersonGUID] || t < new Date(first[r.PersonGUID].LocaleMessageTime).getTime()) {
-//         first[r.PersonGUID] = r;
-//       }
-//     });
-//     const today = { total:0, Employee:0, Contractor:0 };
-//     Object.values(first).forEach(r => {
-//       today.total++;
-//       if (isEmployeeType(r.PersonnelType)) today.Employee++;
-//       else today.Contractor++;
-//     });
-
-//     // last swipe per person for realtime
-//     const last = {};
-//     swipes.forEach(r => {
-//       const t = new Date(r.LocaleMessageTime).getTime();
-//       if (!last[r.PersonGUID] || t > new Date(last[r.PersonGUID].LocaleMessageTime).getTime()) {
-//         last[r.PersonGUID] = r;
-//       }
-//     });
-
-//     const realtime = {};
-//     const unmapped = new Set();
-
-
-
-
-//     Object.values(last).forEach(r => {
-//       const p = r.PartitionName2;
-
-//       // ── Pune gets the more advanced In/Out eviction logic ──
-//       if (p === 'Pune') {
-//         const zoneRaw = mapDoorToZone(r.Door, r.Direction);
-
-//         // 1) Unknown keys → drop
-//         if (zoneRaw === 'Unknown Zone') return;
-
-//         // 2) True “Out of office” → full drop
-//         if (r.Direction === 'OutDirection' && zoneRaw === 'Out of office') {
-//           return;
-//         }
-
-//         // 3) Any other OutDirection → only keep if it’s “…Outer Area”
-//         if (r.Direction === 'OutDirection' && !zoneRaw.endsWith('Outer Area')) {
-//           return;
-//         }
-
-//         // 4) now safe to count
-//         if (!realtime[p]) realtime[p] = { total:0, Employee:0, Contractor:0, floors:{} };
-//         realtime[p].total++;
-//         if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-//         else                                  realtime[p].Contractor++;
-
-//         // 5) floor‐bucket as usual
-//         const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
-//        if (fl !== 'Unknown') {
-//           realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
-//         }
-//         return;
-//       }
-
-//       // ── All other partitions keep your existing logic ──
-//       // (the original “drop only Out of office” snippet)
-//       const normKey = normalizeDoorName(r.Door) + '___' + r.Direction;
-//       let zone = normalizedDoorZoneMap[normKey];
-//       if (!zone) {
-//         const entry = doorMap.find(d =>
-//           d.normalizedDoor === normalizeDoorName(r.Door) &&
-//           d.partition === p
-//         );
-//         zone = entry
-//           ? (r.Direction === 'InDirection'
-//               ? normalizedDoorZoneMap[`${entry.normalizedDoor}___InDirection`]
-//               : normalizedDoorZoneMap[`${entry.normalizedDoor}___OutDirection`])
-//           : null;
-//       }
-//      if (zone === 'Out of office') return;
-
-//       if (!realtime[p]) realtime[p] = { total:0, Employee:0, Contractor:0, floors:{} };
-//       realtime[p].total++;
-//       if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-//       else                                  realtime[p].Contractor++;
-
-//       const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
-//       if (fl !== 'Unknown') {
-//         realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
-//       }
-//     });
-
-
-//     // Log to server console for quick dev feedback:
-//     if (unmapped.size) console.warn('Unmapped doors:', Array.from(unmapped));
-
-//     res.json({
-//       success:    true,
-//       today,
-//       realtime,
-//       // expose the raw list of partition|door keys that had no mapping:
-//       unmapped:   Array.from(unmapped),
-//       details:    Object.values(last)
-//     });
-
-//   } catch (e) {
-//     console.error(e);
-//     res.status(500).json({ success:false, message:'Summary failed' });
-//   }
-// };
-
-
-
-
-exports.getLiveSummary = async (req,res) => {
-  try {
-    const swipes = await service.fetchLiveOccupancy();
-
-    // first swipe per person = TODAY
-    const first = {};
-    swipes.forEach(r => {
-      const t = new Date(r.LocaleMessageTime).getTime();
-      if (!first[r.PersonGUID] || t < new Date(first[r.PersonGUID].LocaleMessageTime).getTime()) {
-        first[r.PersonGUID] = r;
-      }
-    });
-    const today = { total:0, Employee:0, Contractor:0 };
-    Object.values(first).forEach(r => {
-      today.total++;
-      if (isEmployeeType(r.PersonnelType)) today.Employee++;
-      else today.Contractor++;
-    });
-
-    // last swipe per person for realtime
-    const last = {};
-    swipes.forEach(r => {
-      const t = new Date(r.LocaleMessageTime).getTime();
-      if (!last[r.PersonGUID] || t > new Date(last[r.PersonGUID].LocaleMessageTime).getTime()) {
-        last[r.PersonGUID] = r;
-      }
-    });
-
-    const realtime = {};
-    const unmapped = new Set();
-
-    // Build enriched details (add Zone & Floor) for every last-swipe record
-    // NOTE: we'll filter out records whose Zone resolves to "Out of office" so they
-    // neither appear in counts nor in details (strict removal per your request).
-    const enriched = Object.values(last).map(r => {
-      // determine zone (try normalized lookup + fallback)
-      const zone = mapDoorToZone(r.Door, r.Direction);
-
-      // lookupFloor returns 'Unknown' for unmapped (and adds to unmapped set)
-      const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction, unmapped);
-
-      return {
-        ...r,
-        // keep Unknown Zone as null, keep actual zone strings (including "Out of office")
-        Zone: zone === 'Unknown Zone' ? null : zone,
-        Floor: floor === 'Unknown' ? null : floor
-    
-      };
-    });
-
-    // Strictly remove "Out of office" records from details (and from counting below)
-    const details = enriched.filter(r => r.Zone !== 'Out of office');
-
-    // Counting loop (keeps Pune special logic but enforces strict drop on "Out of office")
-    Object.values(last).forEach(r => {
-      const p = r.PartitionName2;
-
-      // determine zone again for each record (use mapDoorToZone to be consistent)
-      const zoneRaw = mapDoorToZone(r.Door, r.Direction);
-
-      // STRICT RULE: if zone resolved to exact "Out of office" -> skip counting
-      if (zoneRaw === 'Out of office') return;
-
-      // Unknown keys → drop
-      if (zoneRaw === 'Unknown Zone') return;
-
-      // ensure bucket exists when we decide to count
-      const ensureBucket = (part) => {
-        if (!realtime[part]) realtime[part] = { total:0, Employee:0, Contractor:0, floors:{}, zones:{} };
-      };
-
-
-if (r.Direction === 'OutDirection') {
-  // allow certain valid OutDirection zones (Assembly Area, Reception Area, ...)
-  const allowedOutZones = new Set(['Assembly Area', 'Reception Area']);
-  if (!zoneRaw.endsWith('Outer Area') && !allowedOutZones.has(zoneRaw)) {
-    return;
-  }
-
-
-        // safe to count
-        ensureBucket(p);
-        realtime[p].total++;
-        if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-        else                                  realtime[p].Contractor++;
-
-        // floor bucket
-        const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
-        if (fl !== 'Unknown') {
-          realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
-        }
-
-        // zone bucket (clean trailing " Zone" for OutDirection cases where appropriate)
-        const z = (r.Direction === 'OutDirection' && zoneRaw !== 'Out of office')
-                    ? zoneRaw.replace(/\s+Zone$/i, '')
-                    : zoneRaw;
-        if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
-
-        return;
-      }
-
-      // ── All other partitions (existing logic) ──
-      // fallback logic to determine zone (keeps previous behaviour if normalized lookup not present)
-      const normKey = normalizeDoorName(r.Door) + '___' + r.Direction;
-      let zone = normalizedDoorZoneMap[normKey];
-      if (!zone) {
-        const entry = doorMap.find(d =>
-          d.normalizedDoor === normalizeDoorName(r.Door) &&
-          d.partition === p
-        );
-        zone = entry
-          ? (r.Direction === 'InDirection'
-              ? normalizedDoorZoneMap[`${entry.normalizedDoor}___InDirection`]
-              : normalizedDoorZoneMap[`${entry.normalizedDoor}___OutDirection`])
-          : null;
-      }
-
-      // if resolved zone (via fallback) is "Out of office" → skip (strict)
-      if (zone === 'Out of office') return;
-      if (!zone && zone !== null) {
-        // keep going — zone could be null if no mapping found, but Unknown Zone was handled above
-      }
-
-      // ok to count
-      ensureBucket(p);
-      realtime[p].total++;
-      if (isEmployeeType(r.PersonnelType)) realtime[p].Employee++;
-      else                                  realtime[p].Contractor++;
-
-      const fl = lookupFloor(p, r.Door, r.Direction, unmapped);
-      if (fl !== 'Unknown') {
-        realtime[p].floors[fl] = (realtime[p].floors[fl] || 0) + 1;
-      }
-
-      const z = zone ? (r.Direction === 'OutDirection' && zone !== 'Out of office' ? zone.replace(/\s+Zone$/i, '') : zone) : null;
-      if (z) realtime[p].zones[z] = (realtime[p].zones[z] || 0) + 1;
-    });
-
-    // Log to server console for quick dev feedback:
-    if (unmapped.size) console.warn('Unmapped doors:', Array.from(unmapped));
-
-    res.json({
-      success:    true,
-      today,
-      realtime,
-      // expose the raw list of partition|door keys that had no mapping:
-      unmapped:   Array.from(unmapped),
-      details    // enriched details with Zone & Floor, with "Out of office" removed
-    });
-
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success:false, message:'Summary failed' });
-  }
-};
-
-
-
-
-
-
-//
-
-exports.getHistoricalOccupancy = async (req, res) => {
-  const location = req.params.location || null;
-  try {
-    // 1) Pull in rows — each now has non-null PartitionNameFriendly
-    const raw = await service.fetchHistoricalOccupancy(location);
-
-    // 2) Dedupe to first swipe per person per day
-    const byDate = raw.reduce((acc, r) => {
-           // force into a "YYYY-MM-DD" string
-     const date = new Date(r.LocaleMessageTime).toISOString().slice(0, 10);
-      acc[date] = acc[date] || {};
-      if (
-        !acc[date][r.PersonGUID] ||
-        new Date(r.LocaleMessageTime) < new Date(acc[date][r.PersonGUID].LocaleMessageTime)
-      ) {
-        acc[date][r.PersonGUID] = r;
-      }
-      return acc;
-    }, {});
-
-    const summaryByDate = [];
-    const details = [];
-
-    // 3) Build summaries
-    Object.keys(byDate).sort().forEach(date => {
-      const recs = Object.values(byDate[date]);
-      details.push(...recs);
-
-      // region totals
-      const region = { total: 0, Employee: 0, Contractor: 0 };
-      // per-partition buckets
-      const partitions = {};
-
-      recs.forEach(r => {
-        // increment region
-        region.total++;
-        if (isEmployeeType(r.PersonnelType)) region.Employee++;
-        else region.Contractor++;
-
-        // only build partitions if we're not filtering to a single location
-        if (!location) {
-          // use the friendly name (guaranteed non-null!), with fallback
-          const key = r.PartitionNameFriendly || 'APAC.Default';
-          if (!partitions[key]) {
-            partitions[key] = { total: 0, Employee: 0, Contractor: 0 };
-          }
-          partitions[key].total++;
-          if (isEmployeeType(r.PersonnelType)) partitions[key].Employee++;
-          else partitions[key].Contractor++;
-        }
-      });
-
-      summaryByDate.push({
-        date,
-        day: new Date(date).toLocaleDateString('en-US', { weekday: 'long' }),
-        region: location
-          ? { name: location, ...region }
-          : { name: 'APAC', ...region },
-        // if location is provided, you can still emit an empty object (`{}`) or skip:
-        partitions: location ? {} : partitions
-      });
-    });
-
-    // 4) Return
-    res.json({ success: true, summaryByDate, details });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: 'Historical failed' });
-  }
-};
-
-
-
-
-
-
-
-
-// src/utils/doorMap.js
-
-// 1) Raw mapping from “DOOR___Direction” → zone name
-const doorZoneMap = {
-  // Podium / Red
-  "APAC_IN_PUN_PODIUM_RED_IDF ROOM-02-RESTRICTED DOOR___InDirection":                 "Red Zone",
-  "APAC_IN_PUN_PODIUM_ST2 DOOR 1 (RED)___InDirection":                            "Red Zone",
-  "APAC_IN_PUN_PODIUM_ST2 DOOR 1 (RED)___OutDirection":                           "Red Zone",
-  "APAC_IN_PUN_PODIUM_RED_MAIN LIFT LOBBY ENTRY 1-DOOR___InDirection":                 "Red Zone",
-  "APAC_IN_PUN_PODIUM_RED_MAIN LIFT LOBBY ENTRY 1-DOOR___OutDirection":                "Out of office",
-  "APAC_IN_PUN_PODIUM_ST 1-DOOR 1 (RED)___InDirection":                                "Red Zone",
-  "APAC_IN_PUN_PODIUM_ST 1-DOOR 1 (RED)___OutDirection":                               "Red Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_RED_RECEPTION TO WS ENTRY 1-DOOR NEW___InDirection":             "Red Zone",
-  "APAC_IN_PUN_PODIUM_RED_RECEPTION TO WS ENTRY 1-DOOR NEW___OutDirection":            "Reception Area",
-  "APAC_IN_PUN_PODIUM_RED_RECREATION AREA FIRE EXIT 1-DOOR NEW___InDirection":         "Red Zone",
-  "APAC_IN_PUN_PODIUM_RED_RECREATION AREA FIRE EXIT 1-DOOR NEW___OutDirection":        "Yellow Zone - Outer Area",
-
-  // Podium / Yellow
-  "APAC_IN_PUN_PODIUM_ST2 DOOR 2 (YELLOW)___InDirection":                              "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_ST2 DOOR 2 (YELLOW)___OutDirection":                             "Yellow Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_YELLOW_MDF RESTRICTED DOOR___InDirection":                       "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_IT STORE ROOM-DOOR RESTRICTED DOOR___InDirection":        "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_REPRO STORE-DOOR RESTRICTED DOOR___InDirection":           "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_CONTROL PANEL ROOM-DOOR RESTRICTED DOOR___InDirection":   "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_PREACTION ROOM-DOOR RESTRICTED DOOR___InDirection":        "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_TESTING LAB-DOOR RESTRICTED DOOR___InDirection":           "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_RECEPTION ENTRY-DOOR___InDirection":                       "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_RECEPTION ENTRY-DOOR___OutDirection":                      "Reception Area",
-  "APAC_IN_PUN_PODIUM_YELLOW_MAIN LIFT LOBBY-DOOR NEW___InDirection":                   "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_MAIN LIFT LOBBY-DOOR NEW___OutDirection":                  "Out of office",
-  "APAC_IN_PUN_PODIUM_ST 1 DOOR 2 (YELLOW)___InDirection":                               "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_ST 1 DOOR 2 (YELLOW)___OutDirection":                              "Yellow Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_YELLOW_FIRE EXIT 1-DOOR NEW___InDirection":                       "Yellow Zone",
-  "APAC_IN_PUN_PODIUM_YELLOW_FIRE EXIT 1-DOOR NEW___OutDirection":                      "Yellow Zone - Outer Area",
-
-  // Podium / Green
-  "APAC_IN_PUN_PODIUM_GREEN-_IDF ROOM 1-RESTRICTED DOOR___InDirection":                "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN_UPS ENTRY 1-DOOR RESTRICTED DOOR___InDirection":            "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN_UPS ENTRY 2-DOOR RESTRICTED DOOR___InDirection":            "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN_LOCKER HR STORE 3-DOOR RESTRICTED DOOR___InDirection":      "Green Zone",
-  "APAC_IN_PUN_PODIUM_ST4 DOOR 2 (GREEN)___InDirection":                                "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN-MAIN LIFT LOBBY-DOOR___InDirection":                        "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN-MAIN LIFT LOBBY-DOOR___OutDirection":                       "Green Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_ST3 DOOR 2 (GREEN)___InDirection":                                "Green Zone",
-  "APAC_IN_PUN_PODIUM_ST3 DOOR 2 (GREEN)___OutDirection":                               "Green Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_GREEN_RECEPTION ENTRY-DOOR___InDirection":                        "Green Zone",
-  "APAC_IN_PUN_PODIUM_GREEN_RECEPTION ENTRY-DOOR___OutDirection":                       "Reception Area",
-
-  // Podium / Orange
-  "APAC_IN_PUN_PODIUM_ST4 DOOR 1 (ORANGE)___InDirection":                               "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_RECEPTION ENTRY-DOOR___InDirection":                      "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_RECEPTION ENTRY-DOOR___OutDirection":                     "Reception Area",
-  "APAC_IN_PUN_PODIUM_ST3_DOOR 1 (ORANGE)___InDirection":                              "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ST3_DOOR 1 (ORANGE)___OutDirection":                             "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_MAIN LIFT LOBBY-DOOR___InDirection":                       "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_MAIN LIFT LOBBY-DOOR___OutDirection":                      "Orange Zone - Outer Area",
-  "APAC_IN_PUN_PODIUM_ORANGE-IDF ROOM 3-RESTRICTED DOOR___InDirection":                "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR NEW___InDirection":            "Orange Zone",
-  "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR NEW___OutDirection":           "Orange Zone - Outer Area",
-
-  // Podium / GSOC door
-  "APAC_IN_PUN_PODIUM_GSOC DOOR RESTRICTED DOOR___InDirection":                         "Yellow Zone",
-
-  // Podium / Main Right & Left Entry
-  "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR NEW___InDirection":                  "Reception Area",
-  "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR NEW___OutDirection":                 "Assembly Area",
-  "APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW___InDirection":                   "Reception Area",
-  "APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW___OutDirection":                  "Assembly Area",
-
-  // Podium / Turnstiles
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1-DOOR___InDirection":                               "Reception Area",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 2-DOOR___InDirection":                               "Reception Area",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 3-DOOR___InDirection":                               "Reception Area",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 4-DOOR___InDirection":                               "Reception Area",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 2 -OUT DOOR___OutDirection":                         "Out of office",
-  "APAC_IN_PUN-PODIUM_P-1 TURNSTILE 3 -OUT DOOR___OutDirection":                         "Out of office",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 4 -OUT DOOR___OutDirection":                         "Out of office",
-  "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1-OUT DOOR___OutDirection":                          "Out of office",
-
-  "APAC_IN_PUN-PODIUM_P-1 TURNSTILE 3 -OUT DOOR___OutDirection":    "Out of office",
-  "APAC_IN_PUN-PODIUM_P-1 TURNSTILE 3 -OUT DOOR___InDirection":    "Reception Area",
-  
-
-
-
-  // 2nd-Floor / IDF + UPS/ELEC + Reception→Workstation + LiftLobby→Reception
-  "APAC_IN_PUN_2NDFLR_IDF ROOM_10:05:86 RESTRICTED DOOR___InDirection":                  "2nd Floor, Pune",
-  "APAC_IN_PUN_2NDFLR_UPS/ELEC ROOM RESTRICTED DOOR___InDirection":                      "2nd Floor, Pune",
-  "APAC_IN_PUN_2NDFLR_RECPTION TO WORKSTATION DOOR___InDirection":                       "2nd Floor, Pune",
-  "APAC_IN_PUN_2NDFLR_RECPTION TO WORKSTATION DOOR___OutDirection":                      "Out of office",
-  "APAC_IN_PUN_2NDFLR_LIFTLOBBY TO RECEPTION EMTRY DOOR___InDirection":                   "2nd Floor, Pune",
-  "APAC_IN_PUN_2NDFLR_LIFTLOBBY TO RECEPTION EMTRY DOOR___OutDirection":                  "2nd Floor, Pune",
-
-  // Tower B
-  "APAC_IN_PUN_TOWER B_MAIN RECEPTION DOOR___InDirection":                               "Tower B",
-  "APAC_IN_PUN_TOWER B_MAIN RECEPTION DOOR___OutDirection":                              "Out of office",
-  "APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR___InDirection":                                   "Tower B",
-  "APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR___OutDirection":                                  "Out of office",
-  "APAC_IN_PUN_TOWER B_ST6_GYM SIDE DOOR___InDirection":                                 "Tower B",
-  "APAC_IN_PUN_TOWER B_ST6_GYM SIDE DOOR___OutDirection":                                "Tower B",
-  "APAC_IN_PUN_TOWER B_ST6_WKS SIDE DOOR___InDirection":                                 "Tower B",
-  "APAC_IN_PUN_TOWER B_ST6_WKS SIDE DOOR___OutDirection":                                "Tower B",
-  "APAC_IN_PUN_TOWER B_ST5_KAPIL DEV DOOR___InDirection":                                "Tower B",
-  "APAC_IN_PUN_TOWER B_ST5_KAPIL DEV DOOR___OutDirection":                               "Tower B",
-  "APAC_IN_PUN_TOWER B_ST5_WKS SIDE DOOR___InDirection":                                 "Tower B",
-  "APAC_IN_PUN_TOWER B_ST5_WKS SIDE DOOR___OutDirection":                                "Tower B",
-  "APAC_IN_PUN_TOWER B_RECEPTION LEFT DOOR___InDirection":                               "Tower B",
-  "APAC_IN_PUN_TOWER B_RECEPTION LEFT DOOR___OutDirection":                              "Tower B",
-  "APAC_IN_PUN_TOWER B_RECEPTION RIGHT DOOR___InDirection":                              "Tower B",
-  "APAC_IN_PUN_TOWER B_RECEPTION RIGHT DOOR___OutDirection":                             "Tower B",
-  "APAC_IN_PUN_TOWER B_IBMS ROOM___InDirection":                                         "Tower B",
-  "APAC_IN_PUN_TOWER B_UPS ROOM___InDirection":                                          "Tower B",
-  "APAC_IN_PUN_TOWER B_MDF ROOM___InDirection": "Tower B",
-  "APAC_IN_PUN_TOWER B_PAC ROOM___InDirection": "Tower B",
-  "APAC_IN_PUN_TOWER B_IT STORE ROOM___InDirection": "Tower B",
-  "APAC_IN_PUN_TOWER B_GYM ROOM___InDirection": "Tower B GYM",
-  "APAC_IN_PUN_TOWER B_GYM ROOM___OutDirection": "Tower B GYM",
-  "APAC_IN_PUN_TOWER B_SITE OPS STORE___InDirection": "Tower B",
-  "APAC_IN_PUN_TOWER B_MOBILE LAB___InDirection": "Tower B",
-  "APAC_IN_PUN_TOWER B_MOBILE LAB___OutDirection": "Tower B",
-  "APAC_IN_PUN_TOWER B_CEC DOOR___InDirection": "Tower B",
-  "APAC_IN_PUN_TOWER B_CEC DOOR___OutDirection": "Tower B",
-
- // ----- APAC-wide (from your Excel file) -----
-  // Kuala Lumpur
-  "APAC_MY_KL_MAIN ENTRANCE DOOR___InDirection":    "Kuala Lumpur",
-  "APAC_MY_KL_MAIN ENTRANCE DOOR___OutDirection":  "Out of office",
-  "APAC_MY_KL_INTERIOR RECEPTION DOOR___InDirection":"Kuala Lumpur",
-  "APAC_MY_KL_INTERIOR RECEPTION DOOR___OutDirection":"Kuala Lumpur",
-  "APAC_MY_KL_SIDE ENTRANCE DOOR NEW___InDirection":"Kuala Lumpur",
-  "APAC_MY_KL_SIDE ENTRANCE DOOR NEW___OutDirection":"Kuala Lumpur",
-  "APAC_MY_KL_PANTRY ENTRANCE DOOR NEW___InDirection":"Kuala Lumpur",
-  "APAC_MY_KL_PANTRY ENTRANCE DOOR NEW___OutDirection":"Kuala Lumpur",
-  "APAC_MY_KL_SERVER ROOM DOOR___InDirection":     "Kuala Lumpur",
-  "APAC_MY_KL_SERVER ROOM DOOR___OutDirection":    "Kuala Lumpur",
-
-  // Tokyo
-  "APAC_JPN_Tokyo_7th FLRSide Entrance___InDirection":"Tokyo",
-  "APAC_JPN_Tokyo_7th FLRSide Entrance___OutDirection":"Out of office",
-  "APAC_JPN_Tokyo_7th FLR_IT Room___InDirection":     "Tokyo",
-  "APAC_JPN_Tokyo_7th FLR_IT Room___OutDirection":    "Tokyo",
-  "APAC_JPN_Tokyo_7th FLR_Main Entrance___InDirection":"Tokyo",
-  "APAC_JPN_Tokyo_7th FLR_Main Entrance___OutDirection":"Out of office",
-  "APAC_JPN_Tokyo_7th FLR_Office Entrance___InDirection":"Tokyo",
-  "APAC_JPN_Tokyo_7th FLR_Office Entrance___OutDirection":"Tokyo",
-  "APAC_JPN_Tokyo_7th FLR_Side Entrance to Back Office___InDirection":"Tokyo",
-  "APAC_JPN_Tokyo_7th FLR_Side Entrance to Back Office___OutDirection":"Out of office",
-
-  // Manila (6th & 7th Floor)
-  "APAC_PH_Manila_6th Floor Enrty Door 1___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor Enrty Door 1___OutDirection":"Out of office",
-  "APAC_PH_Manila_6th Floor Open Office 2___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor Open Office 2___OutDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_Entry Door 2___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_Entry Door 2___OutDirection":"Out of office",
-  "APAC_PH_Manila_6th Floor_Entry Door 3___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_Entry Door 3___OutDirection":"Out of office",
-  "APAC_PH_Manila_6th Floor_Exit Corridor___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_Exit Corridor___OutDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_IDF Restricted Door___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_IDF Restricted Door___OutDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_Mothers Room___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_Mothers Room___OutDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_Print Area___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_Print Area___OutDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_UPS/Switch Restricted Door___InDirection":"6th Floor",
-  "APAC_PH_Manila_6th Floor_UPS/Switch Restricted Door___OutDirection":"6th Floor",
-
-  "APAC_PH_Manila_7th Floor_Directors Office-708___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Directors Office-708___OutDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Exit Corridore-704___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Exit Corridore-704___OutDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_IT Work Room  725___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_IT Work Room  725___OutDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_MDF-726 Restricted Door___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_MDF-726 Restricted Door___OutDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Open Office Door 1-721___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Open Office Door 1-721___OutDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Open Office Door 2-721___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Open Office Door 2-721___OutDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Pantry-720a___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Pantry-720a___OutDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Recption Door 1-701___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Recption Door 1-701___OutDirection":"Out of office",
-  "APAC_PH_Manila_7th Floor_Recption Door 2-701___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Recption Door 2-701___OutDirection":"Out of office",
-  "APAC_PH_Manila_7th Floor_Security Room-723___InDirection":"7th Floor",
-  "APAC_PH_Manila_7th Floor_Security Room-723___OutDirection":"7th Floor",
-
-  // PI Manila DR (Taguig)
-  "APAC_PI_Manila_DR_MainEntrance___InDirection":"Taguig",
-  "APAC_PI_Manila_DR_MainEntrance___OutDirection":"Out of office",
-  "APAC_PI_Manila_DR_OfficeLobby___InDirection":"Taguig",
-  "APAC_PI_Manila_DR_OfficeLobby___OutDirection":"Out of office",
-  "APAC_PI_Manila_DR_Server Restricted Door___InDirection":"Taguig",
-  "APAC_PI_Manila_DR_Server Restricted Door___OutDirection":"Taguig",
-  "APAC_PI_Manila_DR_StorageRm___InDirection":"Taguig",
-  "APAC_PI_Manila_DR_StorageRm___OutDirection":"Taguig",
-  "APAC_PI_Manila_Emerg Exit Dr- Lobby___InDirection":"Taguig",
-  "APAC_PI_Manila_Emerg Exit Dr- Lobby___OutDirection":"Taguig",
-  "APAC_PI_Manila_Emgerg DR_Storage RM___InDirection":"Taguig",
-  "APAC_PI_Manila_Emgerg DR_Storage RM___OutDirection":"Taguig",
-
-
-
-
-// --- Manila 7th Floor Reception Doors ---
-"APAC_PH_Manila_7th Floor Recption Door 1-701___InDirection":    "7th Floor",
-"APAC_PH_Manila_7th Floor Recption Door 1-701___OutDirection":   "Out of office",
-
-"APAC_PH_Manila_7th Floor Recption Door 2-701___InDirection":    "7th Floor",
-"APAC_PH_Manila_7th Floor Recption Door 2-701___OutDirection":   "Out of office",
-
-// --- Manila 7th Floor Open Office Door 2-721 ---
-"APAC_PH_Manila_7th Floor Open Office Door 2-721___InDirection":  "7th Floor",
-"APAC_PH_Manila_7th Floor Open Office Door 2-721___OutDirection": "7th Floor",
-
-// --- Manila 7th Floor IT Work Room  725 & Security Room 723 ---
-"APAC_PH_Manila_7th Floor IT Work Room  725___InDirection":      "7th Floor",
-"APAC_PH_Manila_7th Floor IT Work Room  725___OutDirection":     "7th Floor",
-
-"APAC_PH_Manila_7th Floor Security Room-723___InDirection":      "7th Floor",
-"APAC_PH_Manila_7th Floor Security Room-723___OutDirection":     "7th Floor",
-
-// --- Manila 6th Floor variants ---
-"APAC_PH_Manila_6th Floor Enrty Door 1___InDirection":           "6th Floor",
-"APAC_PH_Manila_6th Floor Enrty Door 1___OutDirection":          "Out of office",
-
-"APAC_PH_Manila_6th Floor Print Area___InDirection":             "6th Floor",
-"APAC_PH_Manila_6th Floor Print Area___OutDirection":            "6th Floor",
-
-"APAC_PH_Manila_6th Floor Entry Door 2___InDirection":           "6th Floor",
-"APAC_PH_Manila_6th Floor Entry Door 2___OutDirection":          "Out of office",
-
-"APAC_PH_Manila_6th Floor Entry Door 3___InDirection":           "6th Floor",
-"APAC_PH_Manila_6th Floor Entry Door 3___OutDirection":          "6th Floor",
-
-// --- Pune Tower B Lift Lobby Door (OutDirection) ---
-"APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR___OutDirection":            "Out of office",
-
-// --- Pune Turnstile 1 Exit Door (normalize the hyphen) ---
-"APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1 OUT DOOR___OutDirection":    "Out of office",
-
-// --- Taguig Main Entrance Door (InDirection) ---
-"APAC_PI_Manila_DR_MainEntrance___InDirection":                  "Taguig",
-"APAC_PI_Manila_DR_MainEntrance___OutDirection":                 "Out of office",
-
-// --- Tokyo 7th Floor Office Entrance (OutDirection) ---
-"APAC_JPN_Tokyo_7th FLR Office Entrance___OutDirection":        "Out of office",
-
-};
-
-
-
-
-// 2) zone → floor
-const zoneFloorMap = {
-
-  "Red Zone":                    "Podium Floor",
-  "Yellow Zone":                 "Podium Floor",
-  "Reception Area":              "Podium Floor",
-  "Green Zone":                  "Podium Floor",
-  "Orange Zone":                 "Podium Floor",
-  "Gsoc Zone":                   "Podium Floor",
-  "Assembly Area":               "Podium Floor",
-  "Red":"Podium Floor",
-
-  // 2nd Floor
-  "2nd Floor, Pune":             "2nd Floor",
-
-  // Tower B
-  "Tower B":                     "Tower B",
-  "Reception Area Tower B":      "Tower B",
-  "Tower B GYM":                 "Tower B",
-
-  // Outer‐Area variants (same floors as their base zones)
-  "Red Zone - Outer Area":               "Podium Floor",
-  "Yellow Zone - Outer Area":            "Podium Floor",
-  "Reception Area - Outer Area":         "Podium Floor",
-  "Green Zone - Outer Area":             "Podium Floor",
-  "Orange Zone - Outer Area":            "Podium Floor",
-  "Assembly Area - Outer Area":          "Podium Floor",
-  "2nd Floor, Pune - Outer Area":        "2nd Floor",
-  "Tower B - Outer Area":                "Tower B",
-  "Reception Area Tower B - Outer Area": "Tower B",
-  "Tower B GYM - Outer Area":            "Tower B",
-
-  // True “Out of office” eviction (we filter these out in the controller)
-  
-
-  "Kuala Lumpur":             "Kuala Lumpur",
-  "6th Floor":                "6th Floor",
-  "7th Floor":                "7th Floor",
-  "Tokyo":                    "Tokyo",
-  "Taguig":                   "Taguig",
-  // All true “Out of office” go to Unknown:
-  "Out of office":            null
-};
-
-
-// 3) How to derive partition for PartitionName2
-// 3) Partition → friendly name
-const partitionMap = {
-  'APAC_IN_PUN':    'Pune',
-  'APAC_PH_Manila': 'Quezon City',
-  'APAC_JPN_Tokyo': 'JP.Tokyo',
-  'APAC_MY_KL':     'MY.Kuala Lumpur',
-  'APAC_PI_Manila': 'Taguig City'
-};
-
-
-
-function normalizeDoorName(name) {
-  return name
-    .replace(/[_/]/g, ' ')                      // underscores/slashes → spaces
-    .replace(/[^\w\s-]/g, '')                   // drop punctuation except hyphens
-    .replace(/\bRECPTION\b/gi, 'RECEPTION')     // typo fix
-    .replace(/\bENRTY\b|\bENTRTY\b/gi, 'ENTRY') // typo fix
-   // strip any trailing 6-digit hex string (e.g. "10054B")
-   .replace(/\b[0-9A-F]{6}\b$/, '')
-    .replace(/[\s-]+/g, ' ')                    // collapse spaces & hyphens
-    .toUpperCase()
-    .trim();
-}
-
-
-
-// 5) Build normalized door→zone lookup
-const normalizedDoorZoneMap = Object.entries(doorZoneMap).reduce((acc, [rawKey, zone]) => {
-  const [rawDoor, direction] = rawKey.split('___');
-  const normKey = `${normalizeDoorName(rawDoor)}___${direction}`;
-  acc[normKey] = zone;
-  return acc;
-}, {});
-
-// 6) Build per-partition doorMap entries
-const doorMap = Object.entries(doorZoneMap).reduce((acc, [rawKey, zone]) => {
-  const [rawDoor, direction] = rawKey.split('___');
-  const prefix    = rawDoor.split('_').slice(0,3).join('_');
-  const partition = partitionMap[prefix] || prefix;
-  const floor     = zoneFloorMap[zone]  || 'Unknown';
-
-  if (!acc[rawDoor]) {
-    acc[rawDoor] = {
-      partition,
-      door: rawDoor,
-      inDirectionFloor:  null,
-      outDirectionFloor: null,
-      normalizedDoor:    normalizeDoorName(rawDoor)
-    };
-  }
-  if (direction === 'InDirection')  acc[rawDoor].inDirectionFloor  = floor;
-  else                              acc[rawDoor].outDirectionFloor = floor;
-
-  return acc;
-}, {});
-
-// 7) Export
-module.exports = {
-  doorZoneMap,
-  normalizedDoorZoneMap,
-  zoneFloorMap,
-  doorMap: Object.values(doorMap),
-  normalizeDoorName
-};
-
-
-
-
-
-
-
-
-
-
-// D:\DASHBOARD\apac-occupancy-frontend\src\pages\PartitionDetailDetails.jsx
-
-import React, { useEffect, useState, useMemo } from "react";
-import {
-  Container, Box, Typography, Button, TextField,
-  Paper, TableContainer, Table, TableHead, TableRow, TableCell, TableBody
-} from "@mui/material";
-import { useParams, useNavigate } from "react-router-dom";
-
-import Header from "../components/Header";
-import Footer from "../components/Footer";
-import LoadingSpinner from "../components/LoadingSpinner";
-import DataTable from "../components/DataTable";
-
-import { fetchLiveSummary } from "../api/occupancy.service";
-import { lookupFloor } from "../utils/floorLookup";
-
-
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-
-
-
-export default function PartitionDetailDetails() {
-  const { partition } = useParams();
-  const navigate = useNavigate();
-
-  const [details, setDetails] = useState([]);
-  const [liveCounts, setLiveCounts] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState("");
-  const [search, setSearchTerm] = useState("");
-  const [expandedFloor, setExpandedFloor] = useState(null);
-
-
-  // Helper: format API ISO (UTC) to "hh:mm:ss AM/PM"
-  const formatApiDateTime = iso => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (isNaN(d)) return iso;
-
-    const hours24 = d.getUTCHours();
-    const minutes = String(d.getUTCMinutes()).padStart(2, "0");
-    const seconds = String(d.getUTCSeconds()).padStart(2, "0");
-
-    const ampm = hours24 >= 12 ? "PM" : "AM";
-    let hour12 = hours24 % 12;
-    if (hour12 === 0) hour12 = 12;
-    const hourStr = String(hour12).padStart(2, "0");
-
-    return `${hourStr}:${minutes}:${seconds} ${ampm}`;
+    const base = `/partition/${encodeURIComponent(newPartition)}`;
+    const full = suffixSegments.length
+      ? `${base}/${suffixSegments.join('/')}`
+      : base;
+
+    navigate(full);
+    setDrawerOpen(false);
   };
 
-
-
-  // 2) add this export handler inside the component (place it after formatApiDateTime and before the return)
-  const handleExportFloor = (floor, emps) => {
-    if (!emps || emps.length === 0) return;
-
-    // build rows: header + data
-    const rows = [
-      ['Emp ID', 'Name', 'Swipe Time', 'Type', 'Company', 'Card', 'Door'],
-      ...emps.map(r => [
-        r.EmployeeID ?? '',
-        r.ObjectName1 ?? '',
-        formatApiDateTime(r.LocaleMessageTime),
-        r.PersonnelType ?? '',
-        r.CompanyName ?? '',
-        r.CardNumber ?? '',
-        r.Door ?? ''
-      ])
-    ];
-
-    // convert to sheet & workbook
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'FloorExport');
-
-    // filename safe floor name + timestamp
-    const safeFloor = floor.replace(/[^a-z0-9\-_]/gi, '_').slice(0, 80);
-    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const filename = `${partition || 'partition'}_${safeFloor}_${ts}.xlsx`;
-
-    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([buf]), filename);
-  };
-
-
-
-
-  // 1) Filter the raw details → keep only In/Out for this partition,
-  //    map to include floor, then drop any that resolve to "Unmapped"
-  const filterAndMap = json =>
-    json.details
-      .filter(r =>
-        r.PartitionName2 === partition &&
-        (r.Direction === "InDirection" || r.Direction === "OutDirection")
-      )
-      .map(r => {
-        const floor = lookupFloor(r.PartitionName2, r.Door, r.Direction);
-        return { ...r, floor };
-      })
-      .filter(r => r.floor !== "Unmapped");  // remove any Out-of-office / unmapped
-
-  // initial load
-  useEffect(() => {
-    let active = true;
-    fetchLiveSummary().then(json => {
-      if (!active) return;
-      setLiveCounts(json.realtime[partition]?.floors || {});
-      setDetails(filterAndMap(json));
-      setLastUpdate(new Date().toLocaleTimeString());
-      setLoading(false);
-    });
-    return () => { active = false };
-  }, [partition]);
-
-  // poll every second
-  useEffect(() => {
-    const iv = setInterval(async () => {
-      const json = await fetchLiveSummary();
-      setLiveCounts(json.realtime[partition]?.floors || {});
-      setDetails(filterAndMap(json));
-      setLastUpdate(new Date().toLocaleTimeString());
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [partition]);
-
-  // group by floor name
-  const floorMap = useMemo(() => {
-    const m = {};
-    Object.keys(liveCounts).forEach(f => { m[f] = [] });
-    details.forEach(r => {
-      if (!m[r.floor]) m[r.floor] = [];
-      m[r.floor].push(r);
-    });
-    return m;
-  }, [details, liveCounts]);
-
-  // apply search filter to each floor's list
-  // const displayed = useMemo(() => {
-  //   const term = search.toLowerCase();
-  //   return Object.entries(floorMap)
-  //     .map(([floor, emps]) => {
-  //       const filtered = emps.filter(e =>
-  //         floor.toLowerCase().includes(term) ||
-  //         e.ObjectName1?.toLowerCase().includes(term) ||
-  //         `${e.EmployeeID}`.toLowerCase().includes(term) ||
-  //         `${e.CardNumber}`.toLowerCase().includes(term)
-  //       );
-  //       return [floor, filtered];
-  //     })
-  //     .filter(([, emps]) => emps.length > 0);
-
-
-  // }, [floorMap, search]);
-
-
-
-  // apply search filter to each floor's list
-  const displayed = useMemo(() => {
-    const term = search.toLowerCase();
-
-    const arr = Object.entries(floorMap)
-      .map(([floor, emps]) => {
-        const filtered = emps.filter(e =>
-          floor.toLowerCase().includes(term) ||
-          e.ObjectName1?.toLowerCase().includes(term) ||
-          `${e.EmployeeID}`.toLowerCase().includes(term) ||
-          `${e.CardNumber}`.toLowerCase().includes(term)
-        );
-        return [floor, filtered];
-      })
-      .filter(([, emps]) => emps.length > 0);
-
-    // ✅ sort by length descending (largest totals first)
-    arr.sort((a, b) => b[1].length - a[1].length);
-
-    return arr;
-  }, [floorMap, search]);
-
-
-
-  const columns = [
-    { field: "EmployeeID", headerName: "Emp ID" },
-    { field: "ObjectName1", headerName: "Name" },
-    { field: "LocaleMessageTime", headerName: "Swipe Time" },
-    { field: "PersonnelType", headerName: "Type" },
-    { field: "CompanyName", headerName: "Company" }, // <-- ADD THIS LINE
-    { field: "CardNumber", headerName: "Card" },
-    { field: "Door", headerName: "Door" },
+  const navItems = [
+    { icon: <HomeIcon />, label: 'Home Page', action: () => navigate('/') },
+    { icon: <HistoryIcon />, label: 'History', action: () => navigate(currentPartition ? makePartitionPath('history') : '/history') },
+    { icon: <ListAltIcon />, label: 'Live Details Page', action: () => navigate(currentPartition ? makePartitionPath('details') : '/partition/Pune/details') },
   ];
-
-  if (loading) {
-    return (
-      <>
-        <Header />
-        <Box sx={{ px: 2, py: 8 }}><LoadingSpinner /></Box>
-        <Footer />
-      </>
-    );
-  }
 
   return (
     <>
-      <Header />
-      <Box sx={{ pt: 1, pb: 1, background: "rgba(0,0,0,0.6)" }}>
-        <Container disableGutters maxWidth={false}>
-
-          {/* Back button + title */}
-          <Box display="flex" alignItems="center" mb={2} sx={{ px: 2 }}>
-            <Button size="small" onClick={() => navigate(-1)} sx={{ color: "#FFC107" }}>
-              ← Back to Overview
-            </Button>
-          </Box>
-
-          {/* Search + timestamp */}
-          <Box display="flex" alignItems="center" gap={2} mb={2} sx={{ px: 2 }}>
-            <Typography variant="h6" sx={{ color: "#FFC107" }}>
-              Floor Details
-            </Typography>
-
-            {/* <Typography variant="body2" sx={{ color: "#FFC107" }}>
-              Last updated: {lastUpdate}
-            </Typography> */}
-
-            <TextField
-              size="small"
-              placeholder="Search floor / emp…"
-              value={search}
-              onChange={e => setSearchTerm(e.target.value)}
-              sx={{
-                "& .MuiInputBase-input": { color: "#FFC107" },
-                "& .MuiOutlinedInput-root fieldset": { borderColor: "#FFC107" }
-              }}
-            />
-          </Box>
-
-           {/* 3) replace the floor card JSX (the displayed.map rendering) with this updated version */}
-          {/* Floor cards */}
-          <Box display="flex" flexWrap="wrap" width="100%" sx={{ px: 2 }}>
-            {displayed.map(([floor, emps]) => (
-              <Box key={floor} sx={{ width: "50%", p: 2 }}>
-                <Paper sx={{
-                  border: "2px solid #FFC107",
-                  p: 2,
-                  background: "rgba(0,0,0,0.4)"
-                }}>
-                  {/* Header row: left = floor title, right = export button */}
-                  <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                    <Typography
-                      variant="subtitle1"
-                      fontWeight={600}
-                      sx={{ color: "#FFC107" }}
-                    >
-                      {floor} (Total {emps.length})
-                    </Typography>
-
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => handleExportFloor(floor, emps)}
-                      sx={{ bgcolor: '#FFC107', color: '#000', textTransform: 'none' }}
-                    >
-                      Export
-                    </Button>
-                  </Box>
-
-                  <TableContainer
-                    component={Paper}
-                    variant="outlined"
-                    sx={{ mb: 1, background: "rgba(0,0,0,0.4)" }}
-                  >
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow sx={{ bgcolor: "#000" }}>
-                          {["Emp ID", "Name", "Swipe Time", "Type", "Company", "Card", "Door"].map(h => (
-                            <TableCell
-                              key={h}
-                              sx={{
-                                color: "#FFC107",
-                                border: "1px solid #FFC107",
-                                fontWeight: "bold"
-                              }}
-                            >
-                              {h}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {emps.slice(0, 10).map((r, i) => (
-                          <TableRow key={i}>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.EmployeeID}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.ObjectName1}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {formatApiDateTime(r.LocaleMessageTime)}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.PersonnelType}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.CompanyName}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.CardNumber}
-                            </TableCell>
-                            <TableCell sx={{ color: "#fff", border: "1px solid #FFC107" }}>
-                              {r.Door}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-
-                  <Button
-                    size="small"
-                    onClick={() => setExpandedFloor(f => f === floor ? null : floor)}
-                    sx={{ color: "#FFC107" }}
-                  >
-                    {expandedFloor === floor ? "Hide" : "See more…"}
-                  </Button>
-                </Paper>
-              </Box>
-            ))}
-          </Box>
-
-
-
-          {/* Expanded table */}
-          {expandedFloor && (
-            <Box sx={{ px: 2, mt: 2 }}>
-              <Typography variant="h6" sx={{ color: "#FFC107" }} gutterBottom>
-                {expandedFloor} — All Entries
+      <AppBar
+        position="static"
+        sx={{
+          background: 'linear-gradient(90deg, #111, #222)',
+          px: isMobile ? 1 : 2,
+          py: isMobile ? 0.5 : 0,
+        }}
+      >
+        <Toolbar
+          disableGutters
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          {/* Left: Logo + Title */}
+          <Box display="flex" alignItems="center" sx={{ gap: 1 }}>
+            <Box component="img" src={wuLogo} alt="WU" border='1' sx={{ height: isMobile ? 28 : 36, border: '1px solid black' }} />
+            {!isMobile && (
+              <Typography
+                variant={isTablet ? 'h6' : 'h5'}
+                sx={{ color: '#FFC107', fontWeight: 600, ml: 1 }}
+              >
+                APAC Occupancy
+                {currentPartition && ` • ${displayNameMap[currentPartition] || currentPartition}`}
               </Typography>
+            )}
+          </Box>
 
-              <DataTable
-                // add a Sr No column only for the expanded table (keeps original `columns` unchanged)
-                columns={[{ field: "SrNo", headerName: "Sr No" }, ...columns]}
-                rows={(floorMap[expandedFloor] || []).map((r, i) => ({
-                  ...r,
-                  LocaleMessageTime: formatApiDateTime(r.LocaleMessageTime),
-                  SrNo: i + 1 // 1,2,3...
-                }))}
-              />
+          {/* Right Section */}
+          {isMobile ? (
+            <IconButton color="inherit" onClick={() => setDrawerOpen(true)}>
+              <MenuIcon />
+            </IconButton>
+          ) : (
+            <Box display="flex" alignItems="center" gap={2}>
+              {/* Icons with tooltips */}
+              
+              <Box display="flex" alignItems="center" gap={1.5}>
+                {navItems.map((item, idx) => (
+                  <Tooltip
+                    key={idx}
+                    title={
+                      <Typography sx={{ fontSize: '0.9rem', fontWeight: 500 }}>
+                        {item.label}
+                      </Typography>
+                    }
+                    arrow
+                    placement="bottom"
+                  >
+                    <IconButton color="inherit" onClick={item.action}>
+                      {React.cloneElement(item.icon, { fontSize: 'medium' })}
+                    </IconButton>
+                  </Tooltip>
+                ))}
+              </Box>
+
+              {/* Selector */}
+              <Select
+                size={isTablet ? 'small' : 'medium'}
+                value={selectedPartition}
+                displayEmpty
+                onChange={(e) => handlePartitionChange(e.target.value)}
+                sx={{
+                  bgcolor: '#fff',
+                  color: '#000',
+                  borderRadius: 1,
+                  minWidth: 160,
+                  fontSize: '0.9rem',
+                  height: 40,
+                }}
+
+                renderValue={(selected) =>
+                  selected ? (
+                    <Box display="flex" alignItems="center">
+                      <Box
+                        component="img"
+                        src={flagMap[selected]}
+                        alt={selected}
+                        sx={{
+                          width: 22,
+                          height: 15,
+                          mr: 1,
+                          border: '1px solid #6a6868ff', // ✅ adds visible border
+                          
+                          objectFit: 'cover',
+                        }}
+                      />
+                      {displayNameMap[selected] || selected}
+                    </Box>
+                  ) : '— Select Site —'
+                }
+
+              >
+                <MenuItem value="">— Select Site —</MenuItem>
+                {partitionList.map((p) => (
+                  <MenuItem key={p} value={p}>
+                    {displayNameMap[p] || p}
+                  </MenuItem>
+                ))}
+              </Select>
             </Box>
           )}
+        </Toolbar>
+      </AppBar>
 
-
-
-
-
-        </Container>
-      </Box>
-      <Footer />
+      {/* MOBILE DRAWER (unchanged) */}
+      <Drawer
+        anchor="right"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        PaperProps={{ sx: { width: 260, background: '#111', color: '#fff' } }}
+      >
+        <Box sx={{ p: 2 }}>
+          <Box display="flex" justifyContent="flex-end">
+            <IconButton onClick={() => setDrawerOpen(false)} sx={{ color: '#FFC107' }}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          <Box display="flex" alignItems="center" mb={2}>
+            <Box component="img" src={wuLogo} alt="WU" sx={{ height: 30, mr: 1 }} />
+            <Typography variant="h6" sx={{ color: '#FFC107' }}>
+              APAC Occupancy
+            </Typography>
+          </Box>
+          <List>
+            {navItems.map((item, i) => (
+              <ListItemButton key={i} onClick={() => { item.action(); setDrawerOpen(false); }}>
+                <ListItemIcon sx={{ color: '#FFC107' }}>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            ))}
+          </List>
+          <Box mt={2}>
+            <Typography variant="body2" sx={{ mb: 1, color: '#FFC107' }}>
+              Select Site
+            </Typography>
+            <Select
+              fullWidth
+              size="small"
+              value={selectedPartition}
+              displayEmpty
+              onChange={(e) => handlePartitionChange(e.target.value)}
+              sx={{
+                bgcolor: '#fff',
+                color: '#000',
+                borderRadius: 1,
+                fontSize: '0.85rem',
+              }}
+              renderValue={(selected) =>
+                selected ? (
+                  <Box display="flex" alignItems="center">
+                    <Box
+                      component="img"
+                      src={flagMap[selected]}
+                      alt={selected}
+                      sx={{ width: 20, height: 14, mr: 1 }}
+                    />
+                    {displayNameMap[selected] || selected}
+                  </Box>
+                ) : '— Select Site —'
+              }
+            >
+              <MenuItem value="">— Select Site —</MenuItem>
+              {partitionList.map((p) => (
+                <MenuItem key={p} value={p}>
+                  {displayNameMap[p] || p}
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
+        </Box>
+      </Drawer>
     </>
   );
 }
-
-
-

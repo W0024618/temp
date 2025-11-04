@@ -1,376 +1,433 @@
-  // Proper column-to-letter helper (supports >26 columns)
-const colLetter = (col) => {
-  let letter = '';
-  while (col > 0) {
-    let rem = (col - 1) % 26;
-    letter = String.fromCharCode(65 + rem) + letter;
-    col = Math.floor((col - 1) / 26);
+
+
+
+
+// C:\Users\W0024618\Desktop\swipeData\employee-ai-insights\controllers\liveOccupancyController.js
+const { DateTime } = require('luxon');
+const { sql, getPool } = require('../config/db');
+
+const doorZoneMap  = require('../data/doorZoneMap');
+const zoneFloorMap = require('../data/zoneFloorMap');
+const ertMembers   = require('../data/puneErtMembers.json');
+
+// Track which door→zone keys we've already warned on
+const warnedKeys = new Set();
+
+// --- Helpers ---
+
+function getTodayString() {
+  return DateTime.now().setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+}
+
+function normalizeZoneKey(rawDoor, rawDir) {
+  let door = String(rawDoor || '').trim();
+  door = door.replace(/_[0-9A-F]{2}:[0-9A-F]{2}:[0-9A-F]{2}$/, '');
+  door = door.replace(/\s+/g, ' ').toUpperCase();
+  const dir = rawDir === 'InDirection' ? 'InDirection' : 'OutDirection';
+  return `${door}___${dir}`;
+}
+
+function normalizePersonName(raw) {
+  let n = String(raw || '').trim();
+  if (n.includes(',')) {
+    const [last, rest] = n.split(',', 2);
+    n = `${rest.trim()} ${last.trim()}`;
   }
-  return letter;
+  return n.toLowerCase();
+}
+
+function mapDoorToZone(rawDoor, rawDir) {
+  const key = normalizeZoneKey(rawDoor, rawDir);
+  const zone = doorZoneMap[key];
+  if (!zone) {
+    if (!warnedKeys.has(key)) {
+      console.warn('⛔ Unmapped door–direction key:', key);
+      warnedKeys.add(key);
+    }
+    return 'Unknown Zone';
+  }
+  return zone;
+}
+
+// --- Core functions ---
+
+async function fetchNewEvents(since) {
+  const pool = await getPool();
+  const req  = pool.request();
+  req.input('since', sql.DateTime2, since);
+
+  const { recordset } = await req.query(`
+    WITH CombinedQuery AS (
+      SELECT
+        DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) AS LocaleMessageTime,
+        t1.ObjectName1,
+        CASE
+          WHEN t3.Name IN ('Contractor','Terminated Contractor') THEN t2.Text12
+          ELSE CAST(t2.Int1 AS NVARCHAR)
+        END AS EmployeeID,
+        t1.ObjectIdentity1 AS PersonGUID,
+        t3.Name AS PersonnelType,
+        COALESCE(
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+          TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+          sc.value
+        ) AS CardNumber,
+        t5a.value AS AdmitCode,
+        t5d.value AS Direction,
+        t1.ObjectName2 AS Door,
+        t2.Text4 AS CompanyName,          -- ✅ added
+      t2.Text5 AS PrimaryLocation       -- ✅ added
+      FROM [ACVSUJournal_00010030].[dbo].[ACVSUJournalLog] t1
+      LEFT JOIN [ACVSCore].[Access].[Personnel] t2 ON t1.ObjectIdentity1 = t2.GUID
+      LEFT JOIN [ACVSCore].[Access].[PersonnelType] t3 ON t2.PersonnelTypeId = t3.ObjectID
+      LEFT JOIN [ACVSUJournal_00010030].[dbo].[ACVSUJournalLogxmlShred] t5a
+        ON t1.XmlGUID = t5a.GUID AND t5a.Name = 'AdmitCode'
+      LEFT JOIN [ACVSUJournal_00010030].[dbo].[ACVSUJournalLogxmlShred] t5d
+        ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+      LEFT JOIN [ACVSUJournal_00010030].[dbo].[ACVSUJournalLogxml] t_xml
+        ON t1.XmlGUID = t_xml.GUID
+      LEFT JOIN (
+        SELECT GUID, value
+        FROM [ACVSUJournal_00010030].[dbo].[ACVSUJournalLogxmlShred]
+        WHERE Name IN ('Card','CHUID')
+      ) sc ON t1.XmlGUID = sc.GUID
+      WHERE
+        t1.MessageType = 'CardAdmitted'
+        AND t1.PartitionName2 = 'APAC.Default'
+        AND DATEADD(MINUTE, -1 * t1.MessageLocaleOffset, t1.MessageUTC) > @since
+    )
+    SELECT
+      LocaleMessageTime,
+      CONVERT(VARCHAR(10), LocaleMessageTime, 23) AS Dateonly,
+      CONVERT(VARCHAR(8), LocaleMessageTime, 108) AS Swipe_Time,
+      EmployeeID,
+      PersonGUID,
+      ObjectName1,
+      PersonnelType,
+      CardNumber,
+      AdmitCode,
+      Direction,
+      Door,
+      CompanyName,         -- ✅ 
+      PrimaryLocation      -- ✅ 
+    FROM CombinedQuery
+    ORDER BY LocaleMessageTime ASC;
+  `);
+
+  return recordset;
+}
+
+async function buildOccupancy(allEvents) {
+  const current      = {};
+  const uniquePeople = new Map();
+
+  for (const evt of allEvents) {
+    const {
+      EmployeeID, PersonGUID,
+      ObjectName1, PersonnelType,
+      CardNumber, Dateonly,
+      Swipe_Time, Direction, Door
+    } = evt;
+
+    const dedupKey = PersonGUID || EmployeeID || CardNumber || ObjectName1;
+    const zoneRaw  = mapDoorToZone(Door, Direction);
+
+    if (zoneRaw === 'Unknown Zone') continue;
+
+    const zoneLower = zoneRaw.toLowerCase();
+
+    if (Direction === 'OutDirection') {
+      if (zoneLower === 'out of office') {
+        uniquePeople.delete(dedupKey);
+        delete current[dedupKey];
+      } else {
+        uniquePeople.set(dedupKey, PersonnelType);
+        current[dedupKey] = { Dateonly, Swipe_Time, EmployeeID, ObjectName1, CardNumber, PersonnelType, zone: zoneRaw, door: Door, CompanyName: evt.CompanyName || null,  PrimaryLocation: evt.PrimaryLocation || null  };
+      }
+      continue;
+    }
+
+    if (Direction === 'InDirection') {
+      uniquePeople.set(dedupKey, PersonnelType);
+      current[dedupKey] = { Dateonly, Swipe_Time, EmployeeID, ObjectName1, CardNumber, PersonnelType, zone: zoneRaw, door: Door, Direction,CompanyName: evt.CompanyName || null, PrimaryLocation: evt.PrimaryLocation || null  };
+      continue;
+    }
+
+    uniquePeople.delete(dedupKey);
+    delete current[dedupKey];
+  }
+
+  let employeeCount = 0;
+  let contractorCount = 0;
+  for (const pt of uniquePeople.values()) {
+    if (['Employee','Terminated Personnel'].includes(pt)) employeeCount++;
+    else contractorCount++;
+  }
+
+  const zoneMap = {};
+  for (const emp of Object.values(current)) {
+    const zKey = emp.zone.toLowerCase();
+    if (zKey === 'out of office') continue;
+    zoneMap[emp.zone] = zoneMap[emp.zone] || [];
+    zoneMap[emp.zone].push(emp);
+  }
+
+  const zoneDetails = Object.fromEntries(
+    Object.entries(zoneMap).map(([zone, emps]) => {
+      const byType = emps.reduce((acc, e) => {
+        acc[e.PersonnelType] = (acc[e.PersonnelType] || 0) + 1;
+        return acc;
+      }, {});
+      return [zone, { total: emps.length, byPersonnelType: byType, employees: emps }];
+    })
+  );
+
+  const floorMap = {};
+  for (const [zone, data] of Object.entries(zoneDetails)) {
+    const floor = zoneFloorMap[zone] || 'Unknown Floor';
+    floorMap[floor] = floorMap[floor] || { total: 0, byPersonnelType: {} };
+    floorMap[floor].total += data.total;
+    for (const [pt, c] of Object.entries(data.byPersonnelType)) {
+      floorMap[floor].byPersonnelType[pt] = (floorMap[floor].byPersonnelType[pt] || 0) + c;
+    }
+  }
+
+  const ertStatus = Object.fromEntries(
+    Object.entries(ertMembers).map(([role, members]) => {
+      const list = members.map(m => {
+        const rawName = m.name || m.Name;
+        const expected = normalizePersonName(rawName);
+        const matchEvt = Object.values(current).find(e => normalizePersonName(e.ObjectName1) === expected);
+        return { ...m, present: !!matchEvt, zone: matchEvt ? matchEvt.zone : null };
+      });
+      return [role, list];
+    })
+  );
+
+  return {
+    asOf: new Date().toISOString(),
+    summary: Object.entries(zoneDetails).map(([z,d])=>({ zone: z, count: d.total })),
+    zoneBreakdown: Object.entries(zoneDetails).map(([z,d])=>({ zone: z, ...d.byPersonnelType, total: d.total })),
+    floorBreakdown: Object.entries(floorMap).map(([f,d])=>({ floor: f, ...d.byPersonnelType, total: d.total })),
+    details: zoneMap,
+    personnelSummary: { employees: employeeCount, contractors: contractorCount },
+    ertStatus,
+    personnelBreakdown: (() => {
+      const map = new Map();
+      for (const pt of uniquePeople.values()) map.set(pt, (map.get(pt)||0)+1);
+      return Array.from(map, ([personnelType, count]) => ({ personnelType, count }));
+    })()
+  };
+}
+
+function buildVisitedToday(allEvents, asOf) {
+  let today;
+  if (asOf) {
+    if (typeof asOf === 'string') today = asOf;
+    else if (asOf instanceof Date) today = DateTime.fromJSDate(asOf, { zone: 'Asia/Kolkata' }).toFormat('yyyy-LL-dd');
+    else if (asOf && typeof asOf.toFormat === 'function') today = asOf.setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+    else today = DateTime.now().setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+  } else today = DateTime.now().setZone('Asia/Kolkata').toFormat('yyyy-LL-dd');
+
+  const todayIns = allEvents.filter(evt => evt.Direction === 'InDirection' && evt.Dateonly === today);
+  const dedup = new Map();
+  for (const e of todayIns) {
+    const key = e.PersonGUID;
+    const prev = dedup.get(key);
+    if (!prev || e.LocaleMessageTime > prev.LocaleMessageTime) dedup.set(key, e);
+  }
+  const finalList = Array.from(dedup.values());
+  const employees = finalList.filter(e => !['Contractor','Terminated Contractor','Temp Badge','Visitor','Property Management'].includes(e.PersonnelType)).length;
+  const contractors = finalList.length - employees;
+  return { employees, contractors, total: finalList.length };
+}
+
+
+// --- SSE endpoint ---
+
+
+exports.getLiveOccupancy = async (req, res) => {
+  try {
+    await getPool();
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    res.write('\n');
+
+    let lastSeen = new Date();
+    const events = [];
+
+    const push = async () => {
+      // fetch only new events since lastSeen
+      const fresh = await fetchNewEvents(lastSeen);
+      if (fresh.length) {
+        lastSeen = new Date();
+        events.push(...fresh);
+      }
+
+      // build live snapshot
+      const occupancy = await buildOccupancy(events);
+      const todayStats = buildVisitedToday(events);
+      occupancy.totalVisitedToday = todayStats.total;
+      occupancy.visitedToday = { ...todayStats };
+
+      // send snapshot every second
+      const sid = Date.now();
+      res.write(`id: ${sid}\n`);
+      res.write(`data: ${JSON.stringify(occupancy)}\n\n`);
+
+      if (typeof res.flush === 'function') res.flush();
+    };
+
+    // push immediately, then every 1 second
+    await push();
+    const timer = setInterval(push, 1000);
+
+    req.on('close', () => clearInterval(timer));
+  } catch (err) {
+    console.error('Live occupancy SSE error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  }
 };
 
 
-const handleExport = async () => {
-    if (!pickedDate) return;
-
-    try {
-      const excelModule = await import('exceljs');
-      const Excel = excelModule.default || excelModule;
-      let wb;
-
-      if (Excel && Excel.Workbook) wb = new Excel.Workbook();
-      else if (typeof Excel === 'function') wb = new Excel();
-      else throw new Error('ExcelJS Workbook constructor not found');
-
-      /* ------------------ SHEET 1: WU Employee ------------------ */
-      const wsDetails = wb.addWorksheet('WU Employee');
-
-      const offsetRow = 2;
-      const offsetCol = 2;
-
-      const detailsHeaders = [
-        'Sr.No', 'Date', 'Time',
-        'Employee Name', 'Employee ID', 'Personal Type',
-        'Door Name', 'Location'
-      ];
-
-      const firstCol = offsetCol;
-      const lastCol = offsetCol + detailsHeaders.length - 1;
-
-      // ---- Title Row ----
-      const titleStart = colLetter(firstCol) + offsetRow;
-      const titleEnd = colLetter(lastCol) + offsetRow;
-      wsDetails.mergeCells(`${titleStart}:${titleEnd}`);
-      const detailsTitle = wsDetails.getCell(offsetRow, firstCol);
-      detailsTitle.value = `${format(pickedDate, 'EEEE, d MMMM, yyyy')}`;
-      detailsTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
-      detailsTitle.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFC107' } };
-      detailsTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-      wsDetails.getRow(offsetRow).height = 22;
-
-      for (let c = firstCol; c <= lastCol; c++) {
-        const cell = wsDetails.getCell(offsetRow, c);
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
-        cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFC107' } };
-        cell.border = {
-          top: { style: 'medium' },
-          bottom: { style: 'medium' },
-          left: { style: 'medium' },
-          right: { style: 'medium' }
-        };
-      }
-
-      // ---- Header Row ----
-      const headerRowIndex = offsetRow + 1;
-      const headerRow = wsDetails.getRow(headerRowIndex);
-      headerRow.height = 22;
-
-      detailsHeaders.forEach((h, idx) => {
-        const colIndex = firstCol + idx;
-        const cell = wsDetails.getCell(headerRowIndex, colIndex);
-        cell.value = h;
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } };
-        cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF000000' } };
-        cell.border = {
-          top: { style: 'medium' }, left: { style: 'medium' },
-          bottom: { style: 'medium' }, right: { style: 'medium' }
-        };
-        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      });
-
-      // ---- Data Rows ----
-      const dataStartRow = headerRowIndex + 1;
-      (detailRows || []).forEach((r, i) => {
-        const rowIndex = dataStartRow + i;
-        const row = wsDetails.getRow(rowIndex);
-        row.height = 22;
-
-        const dateVal = (r.LocaleMessageTime?.slice(0, 10)) || (r.SwipeDate?.slice(0, 10)) || '';
-        const timeVal = formatApiTime12(r.LocaleMessageTime) || '';
-        const name = r.ObjectName1 || '';
-        const empId = r.EmployeeID || '';
-        const ptype = r.PersonnelType || '';
-        const door = r.Door || r.ObjectName2 || '';
-        const location = r.PartitionName2 || r.PrimaryLocation || '';
-
-        const values = [i + 1, dateVal, timeVal, name, empId, ptype, door, location];
-
-        values.forEach((val, idx) => {
-          const colIndex = firstCol + idx;
-          const cell = wsDetails.getCell(rowIndex, colIndex);
-          cell.value = val;
-          cell.border = {
-            top: { style: 'thin' }, left: { style: 'thin' },
-            bottom: { style: 'thin' }, right: { style: 'thin' }
-          };
-          cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF000000' } };
-          cell.alignment = { horizontal: idx === 6 ? 'left' : 'center', vertical: 'middle' };
-        });
-
-        // alternate row fill
-        if (i % 2 === 1) {
-          for (let c = firstCol; c <= lastCol; c++) {
-            wsDetails.getCell(rowIndex, c).fill = {
-              type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F7F7' }
-            };
-          }
-        }
-      });
-
-      // Freeze + autosize
-      wsDetails.views = [{ state: 'frozen', ySplit: headerRowIndex, showGridLines: false }];
-      for (let c = firstCol; c <= lastCol; c++) {
-        let maxLen = 0;
-        for (let r = offsetRow; r <= wsDetails.lastRow.number; r++) {
-          const val = wsDetails.getCell(r, c).value;
-          maxLen = Math.max(maxLen, val ? String(val).length : 0);
-        }
-        wsDetails.getColumn(c).width = Math.min(Math.max(maxLen + 2, 6), 40);
-      }
-
-      wsDetails.pageSetup = {
-        orientation: 'landscape',
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-        horizontalCentered: true,
-        verticalCentered: false,
-        margins: { left: 0.5, right: 0.5, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 }
-      };
-
-      /* ------------------ SHEET 2: WU Summary ------------------ */
-      const ws = wb.addWorksheet('WU Summary');
-      const sOffsetRow = 2, sOffsetCol = 2;
-      const sHeaders = ['Country', 'City', 'Employee', 'Contractors', 'Total'];
-      const sFirstCol = sOffsetCol, sLastCol = sOffsetCol + sHeaders.length - 1;
-
-      // Title Row
-      ws.mergeCells(`${colLetter(sFirstCol)}${sOffsetRow}:${colLetter(sLastCol)}${sOffsetRow}`);
-      const sTitle = ws.getCell(sOffsetRow, sFirstCol);
-      sTitle.value = format(pickedDate, 'EEEE, d MMMM, yyyy');
-      sTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
-      sTitle.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFC107' } };
-      sTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-      ws.getRow(sOffsetRow).height = 22;
-
-      // Headers
-      const sHeaderRow = sOffsetRow + 1;
-      sHeaders.forEach((h, idx) => {
-        const c = sFirstCol + idx;
-        const cell = ws.getCell(sHeaderRow, c);
-        cell.value = h;
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } };
-        cell.font = { name: 'Calibri', size: 11, bold: true };
-        cell.border = { top: { style: 'medium' }, left: { style: 'medium' }, bottom: { style: 'medium' }, right: { style: 'medium' } };
-        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      });
-
-      // Data Rows
-      const sDataStart = sHeaderRow + 1;
-      (partitionRows || []).forEach((r, i) => {
-        const rowIndex = sDataStart + i;
-        const vals = [r.country || '', r.city || '', r.employee || 0, r.contractor || 0, r.total || 0];
-        vals.forEach((val, idx) => {
-          const c = sFirstCol + idx;
-          const cell = ws.getCell(rowIndex, c);
-          cell.value = val;
-          cell.alignment = { horizontal: idx >= 2 ? 'center' : 'left', vertical: 'middle' };
-          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-          cell.font = { name: 'Calibri', size: 10 };
-          if (i % 2 === 1) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F7F7' } };
-          }
-        });
-      });
-
-      // Totals Row
-      const lastDataRow = (partitionRows?.length ? sDataStart + partitionRows.length - 1 : sHeaderRow);
-      const totalsRow = lastDataRow + 1;
-      const totalEmployees = (partitionRows || []).reduce((s, r) => s + (r.employee || 0), 0);
-      const totalContractors = (partitionRows || []).reduce((s, r) => s + (r.contractor || 0), 0);
-      const totalTotals = (partitionRows || []).reduce((s, r) => s + (r.total || 0), 0);
-
-      const totalsFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF666666' } };
-      const totalsFont = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-
-      for (let c = sFirstCol; c <= sLastCol; c++) {
-        const cell = ws.getCell(totalsRow, c);
-        if (c === sFirstCol) cell.value = 'Total';
-        if (c === sFirstCol + 2) cell.value = totalEmployees;
-        if (c === sFirstCol + 3) cell.value = totalContractors;
-        if (c === sFirstCol + 4) cell.value = totalTotals;
-        cell.fill = totalsFill;
-        cell.font = totalsFont;
-        cell.border = { top: { style: 'medium' }, left: { style: 'medium' }, bottom: { style: 'medium' }, right: { style: 'medium' } };
-        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      }
-
-      ws.views = [{ state: 'frozen', ySplit: sHeaderRow, showGridLines: false }];
-
-      // Autosize columns
-      for (let c = sFirstCol; c <= sLastCol; c++) {
-        let maxLen = 0;
-        for (let r = sOffsetRow; r <= totalsRow; r++) {
-          const val = ws.getCell(r, c).value;
-          maxLen = Math.max(maxLen, val ? String(val).length : 0);
-        }
-        ws.getColumn(c).width = Math.min(Math.max(maxLen + 2, 10), 40);
-      }
-
-      ws.pageSetup = {
-        orientation: 'landscape',
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-        horizontalCentered: true,
-        verticalCentered: false,
-        margins: { left: 0.5, right: 0.5, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 }
-      };
-
-      /* ------------------ Save File ------------------ */
-      let cityName = '';
-      if (selectedSummaryPartition) {
-        const [, selCity] = selectedSummaryPartition.split('||');
-        cityName = selCity || '';
-      } else if (filterCode) {
-        const firstRow = companyRows.find(r => r.country === codeToCountry[filterCode]);
-        cityName = firstRow?.city || '';
-      }
-
-      const filename = cityName
-        ? `Western Union LACA (${cityName}) Headcount Report - ${format(pickedDate, 'd MMMM yyyy')}.xlsx`
-        : `Western Union LACA Headcount Report - ${format(pickedDate, 'd MMMM yyyy')}.xlsx`;
-
-      const buf = await wb.xlsx.writeBuffer();
-      saveAs(new Blob([buf]), filename);
-    } catch (err) {
-      console.error('handleExport error:', err);
-    }
-  };
 
 
-
-
-// --------------------------------------------------
-// 🌎 1. Summary Export (Employee/Contractor/Temp Badge)
-// --------------------------------------------------
-const handleExportSummary = async () => {
-  if (!pickedDate || !partitionRows?.length) return;
-
+// GET /api/occupancy-at-time-pune?date=YYYY-MM-DD&time=HH:MM[:SS]
+exports.getPuneSnapshotAtDateTime = async (req, res) => {
   try {
-    const excelModule = await import('exceljs');
-    const Excel = excelModule.default || excelModule;
-    const wb = Excel && Excel.Workbook ? new Excel.Workbook() : new Excel();
-
-    const ws = wb.addWorksheet('Summary');
-    const offsetRow = 2;
-    const offsetCol = 2;
-    const firstCol = offsetCol;
-
-    const headers = ['Country', 'City', 'Employees', 'Contractors'];
-    if (isCostaRica) headers.push('Temp Badge');
-    headers.push('Total');
-
-    const lastCol = firstCol + headers.length - 1;
-
-    // ---- Title row
-    ws.mergeCells(`${colLetter(firstCol)}${offsetRow}:${colLetter(lastCol)}${offsetRow}`);
-    const titleCell = ws.getCell(offsetRow, firstCol);
-    titleCell.value = format(pickedDate, 'EEEE, d MMMM, yyyy');
-    titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FFFFC107' } };
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF000000' } };
-    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    titleCell.border = {
-      top: { style: 'medium' }, bottom: { style: 'medium' },
-      left: { style: 'medium' }, right: { style: 'medium' },
-    };
-    ws.getRow(offsetRow).height = 22;
-
-    // ---- Header row
-    const headerRowIndex = offsetRow + 1;
-    headers.forEach((h, i) => {
-      const cell = ws.getCell(headerRowIndex, firstCol + i);
-      cell.value = h;
-      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF000000' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = {
-        top: { style: 'medium' }, bottom: { style: 'medium' },
-        left: { style: 'medium' }, right: { style: 'medium' },
-      };
-    });
-    ws.getRow(headerRowIndex).height = 22;
-
-    // ---- Data rows
-    const dataStartRow = headerRowIndex + 1;
-    partitionRows.forEach((r, i) => {
-      const rowIndex = dataStartRow + i;
-      const rowVals = [
-        r.country,
-        r.city,
-        r.employee,
-        r.contractor,
-        ...(isCostaRica ? [r.tempBadge] : []),
-        r.total,
-      ];
-
-      rowVals.forEach((val, j) => {
-        const cell = ws.getCell(rowIndex, firstCol + j);
-        cell.value = val;
-        cell.font = { name: 'Calibri', size: 10 };
-        cell.alignment = j >= 2 ? { horizontal: 'right', vertical: 'middle' } : { horizontal: 'left', vertical: 'middle' };
-        if (j >= 2) cell.numFmt = '#,##0';
-        cell.border = {
-          top: { style: 'thin' }, left: { style: 'thin' },
-          bottom: { style: 'thin' }, right: { style: 'thin' },
-        };
-        if (i % 2 === 1) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F7F7' } };
-        }
+    const { date, time } = req.query;
+    if (!date || !time) {
+      return res.status(400).json({
+        error: 'missing query params: expected ?date=YYYY-MM-DD&time=HH:MM[:SS]'
       });
-    });
-
-    // ---- Totals row
-    const lastDataRow = dataStartRow + partitionRows.length - 1;
-    const totalsRowIndex = lastDataRow + 1;
-
-    const totals = [
-      'Total',
-      '',
-      partitionRows.reduce((s, r) => s + (r.employee || 0), 0),
-      partitionRows.reduce((s, r) => s + (r.contractor || 0), 0),
-      ...(isCostaRica ? [partitionRows.reduce((s, r) => s + (r.tempBadge || 0), 0)] : []),
-      partitionRows.reduce((s, r) => s + (r.total || 0), 0),
-    ];
-
-    totals.forEach((val, j) => {
-      const cell = ws.getCell(totalsRowIndex, firstCol + j);
-      cell.value = val;
-      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF666666' } };
-      cell.alignment = j >= 2 ? { horizontal: 'right', vertical: 'middle' } : { horizontal: 'left', vertical: 'middle' };
-      if (j >= 2) cell.numFmt = '#,##0';
-      cell.border = {
-        top: { style: 'medium' }, left: { style: 'medium' },
-        bottom: { style: 'medium' }, right: { style: 'medium' },
-      };
-    });
-    ws.getRow(totalsRowIndex).height = 22;
-
-    // ---- Freeze + Autosize
-    ws.views = [{ state: 'frozen', ySplit: headerRowIndex, showGridLines: false }];
-    for (let c = firstCol; c <= lastCol; c++) {
-      let maxLen = 0;
-      for (let r = offsetRow; r <= totalsRowIndex; r++) {
-        const v = ws.getCell(r, c).value ?? '';
-        maxLen = Math.max(maxLen, String(v).length);
-      }
-      ws.getColumn(c).width = Math.min(Math.max(maxLen + 2, 8), 50);
     }
 
-    const buf = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buf]), `summary_${format(pickedDate, 'yyyyMMdd')}.xlsx`);
+    // Validate date
+    const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!dateMatch) {
+      return res.status(400).json({ error: 'invalid "date" format; expected YYYY-MM-DD' });
+    }
+
+    // Validate time
+    const timeMatch = /^([0-1]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(time);
+    if (!timeMatch) {
+      return res.status(400).json({ error: 'invalid "time" format; expected HH:MM or HH:MM:SS' });
+    }
+
+    const year   = Number(dateMatch[1]);
+    const month  = Number(dateMatch[2]);
+    const day    = Number(dateMatch[3]);
+    const hour   = Number(timeMatch[1]);
+    const minute = Number(timeMatch[2]);
+    const second = timeMatch[3] ? Number(timeMatch[3]) : 0;
+
+    // Build Pune-local datetime
+    const atDt = DateTime.fromObject(
+      { year, month, day, hour, minute, second, millisecond: 0 },
+      { zone: 'Asia/Kolkata' }
+    );
+
+    if (!atDt.isValid) {
+      return res.status(400).json({ error: 'invalid date+time combination' });
+    }
+
+    // Convert to UTC for SQL boundary
+    const untilUtc = atDt.setZone('utc').toJSDate();
+
+    // -----------------
+    // Step 1: fetch events in 24h window ending at atDt
+    const pool = await getPool();
+    const reqDb = pool.request();
+    reqDb.input('until', sql.DateTime2, untilUtc);
+
+    const { recordset } = await reqDb.query(`
+      WITH CombinedQuery AS (
+        SELECT
+          t1.MessageUTC,   -- always UTC
+          t1.ObjectName1,
+          CASE
+            WHEN t3.Name IN ('Contractor','Terminated Contractor') THEN t2.Text12
+            ELSE CAST(t2.Int1 AS NVARCHAR)
+          END AS EmployeeID,
+          t1.ObjectIdentity1 AS PersonGUID,
+          t3.Name AS PersonnelType,
+          COALESCE(
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID/Card)[1]','varchar(50)'),
+            TRY_CAST(t_xml.XmlMessage AS XML).value('(/LogMessage/CHUID)[1]','varchar(50)'),
+            sc.value
+          ) AS CardNumber,
+          t5a.value AS AdmitCode,
+          t5d.value AS Direction,
+          t1.ObjectName2 AS Door,
+           t2.Text4 AS CompanyName,          -- ✅ added
+           t2.Text5 AS PrimaryLocation       -- ✅ added
+        FROM [ACVSUJournal_00010030].[dbo].[ACVSUJournalLog] t1
+        LEFT JOIN [ACVSCore].[Access].[Personnel]     t2 ON t1.ObjectIdentity1 = t2.GUID
+        LEFT JOIN [ACVSCore].[Access].[PersonnelType] t3 ON t2.PersonnelTypeId = t3.ObjectID
+        LEFT JOIN [ACVSUJournal_00010030].[dbo].[ACVSUJournalLogxmlShred] t5a
+          ON t1.XmlGUID = t5a.GUID AND t5a.Name = 'AdmitCode'
+        LEFT JOIN [ACVSUJournal_00010030].[dbo].[ACVSUJournalLogxmlShred] t5d
+          ON t1.XmlGUID = t5d.GUID AND t5d.Value IN ('InDirection','OutDirection')
+        LEFT JOIN [ACVSUJournal_00010030].[dbo].[ACVSUJournalLogxml] t_xml
+          ON t1.XmlGUID = t_xml.GUID
+        LEFT JOIN (
+          SELECT GUID, value
+          FROM [ACVSUJournal_00010030].[dbo].[ACVSUJournalLogxmlShred]
+          WHERE Name IN ('Card','CHUID')
+        ) sc ON t1.XmlGUID = sc.GUID
+        WHERE
+          t1.MessageType     = 'CardAdmitted'
+          AND t1.PartitionName2 = 'APAC.Default'
+          AND t1.MessageUTC <= @until
+          AND DATEADD(HOUR, -24, @until) < t1.MessageUTC
+      )
+      SELECT *
+      FROM CombinedQuery
+      ORDER BY MessageUTC ASC;
+    `);
+
+    // -----------------
+    // Step 2: convert UTC → Asia/Kolkata
+    const events = recordset.map(e => {
+      const local = DateTime.fromJSDate(e.MessageUTC, { zone: 'utc' })
+                            .setZone('Asia/Kolkata');
+      return {
+        ...e,
+        LocaleMessageTime: local.toISO(),
+        Dateonly: local.toFormat('yyyy-LL-dd'),
+        Swipe_Time: local.toFormat('HH:mm:ss'),
+      };
+    });
+
+    // -----------------
+    // Step 3: filter only same Pune date
+    const targetDate = atDt.toFormat('yyyy-LL-dd');
+    const filtered = events.filter(e => e.Dateonly === targetDate);
+
+    // Step 4: build occupancy snapshot
+    const occupancy = await buildOccupancy(filtered);
+
+    // Step 5: visited-today counts aligned to atDt
+    // const visitedStats = buildVisitedToday(filtered);
+    
+    const visitedStats = buildVisitedToday(filtered, atDt);  // this add new code as per function buildVisitedToday change 📝 📝
+
+    // ---- Output timestamps ----
+    occupancy.asOfLocal = atDt.toISO(); // Pune-local with offset
+    occupancy.asOfUTC   = `${date}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:${String(second).padStart(2,'0')}Z`;
+
+    occupancy.totalVisitedToday = visitedStats.total;
+    occupancy.visitedToday = visitedStats;
+
+    return res.json(occupancy);
   } catch (err) {
-    console.error('handleExportSummary error:', err);
+    console.error('getPuneSnapshotAtDateTime error:', err);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
 };

@@ -1,4 +1,14 @@
-APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW
+
+  //Singapore
+
+  "APAC_SG_11 FLR_BackDR___InDirection":"Singapore",
+  "APAC_SG_11 FLR_BackDR___OutDirection":"Out of Office",
+
+  "APAC_SG_11 FLR_Main Door___InDirection":"Singapore",
+  "APAC_SG_11 FLR_Main Door___OutDirection:":"Out of Office",
+
+  "APAC_SG_WU_11 FLR_Server Door___InDirection":"Singapore",
+  "APAC_SG_WU_11 FLR_Server Door___OutDirection":"Singapore",
 
 "Assembly Area": "Podium Floor",
 "Singapore":"Singapore"

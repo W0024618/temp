@@ -3,3 +3,24 @@ import SingaporeFlag from '../assets/flags/Singapore.png';
 'SG.Singapore': SingaporeFlag
 
  'SG.Singapore': 'Singapore',
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // 4) Regions of interest
+  const pune = partitions.find(p => p.name === 'Pune');
+  const quezonCity = partitions.find(p => p.name === 'Quezon City');
+  const TaguigCity = partitions.find(p => p.name === 'Taguig City');
+  const combinedRegions = partitions.filter(p =>
+    ['JP.Tokyo', 'MY.Kuala Lumpur', 'SG.Singapore'].includes(p.name)
+  );

@@ -15,3 +15,14 @@
 
   "APAC_SG_WU_11 FLR_Server Door___InDirection":"Singapore",
   "APAC_SG_WU_11 FLR_Server Door___OutDirection":"Singapore",
+
+
+
+"Singapore":"Singapore"
+
+
+
+......
+
+'APAC_SG_11 FLR':'SG.Singapore',
+  'APAC_SG_WU':'SG.Singapore'

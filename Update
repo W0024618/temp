@@ -1,11 +1,5 @@
 import SingaporeFlag from '../assets/flags/Singapore.png';
 
+'SG.Singapore': SingaporeFlag
 
-
-
-
-
-'SG.Singapore': 'SG.Singapore',
-
-
-'SG.Singapore': SingaporeFlag,
+ 'SG.Singapore': 'Singapore',

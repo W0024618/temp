@@ -1,6 +1,6 @@
 'SG.Singapore'
 
-
+          WHEN t1.ObjectName2 LIKE 'SG.Singapore%'  THEN 'SG.Singapore'
 
 
 

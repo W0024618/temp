@@ -2,7 +2,7 @@
 
           WHEN t1.ObjectName2 LIKE 'SG.Singapore%'  THEN 'SG.Singapore'
 'SG.Singapore'
-
+ WHEN t1.ObjectName2 LIKE 'SG.Singapore%'   THEN 'SG.Singapore'
 
 
   //Singapore

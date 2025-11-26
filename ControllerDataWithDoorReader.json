@@ -1,0 +1,3360 @@
+[
+    {
+        "controllername": "IN-PUN-2NDFLR-ISTAR PRO",
+        "IP_address": "10.199.13.10",
+        "Location": "APAC",
+        "City": "Pune 2nd Floor",
+        "Doors": [
+            {
+                "Door": "APAC_IN_PUN_2NDFLR_IDF ROOM_10:05:86 Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_2NDFLR_UPS/ELEC ROOM Restricted Door_10:05:FE",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_2NDFLR_RECPTION TO WORKSTATION DOOR_10:05:4B",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_2NDFLR_RECPTION TO WORKSTATION DOOR_10:05:4B",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_2NDFLR_LIFTLOBBY TO RECEPTION EMTRY DOOR_10:05:74",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_2NDFLR_LIFTLOBBY TO WORKSTATION DOOR_10:05:F0",
+                "Reader": ""
+            }
+        ]
+    },
+    {
+        "controllername": "IN-PUN-PODIUM-ISTAR PRO-01",
+        "IP_address": "10.199.8.20",
+        "Location": "APAC",
+        "City": "Pune Podium",
+        "Doors": [
+            {
+                "Door": "APAC_IN-PUN-PODIUM-RED-RECREATION AREA FIRE EXIT 1-DOOR",
+                "Reader": ""
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_RED_IDF ROOM-02-Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN-PUN-PODIUM-MAIN PODIUM LEFT ENTRY-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN-PUN-PODIUM-RED-RECEPTION TO WS ENTRY 1-DOOR",
+                "Reader": ""
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST2 DOOR 1 (RED)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_RED_MAIN LIFT LOBBY ENTRY 1-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_RED_MAIN LIFT LOBBY ENTRY 1-DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST 1-DOOR 1 (RED)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST 1-DOOR 1 (RED)",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN-PUN-PODIUM-YELLOW- SERVICE PASSAGE 1 ENTRY-DOOR",
+                "Reader": ""
+            },
+            {
+                "Door": "APAC_IN-PUN-PODIUM-YELLOW-MAIN LIFT LOBBY-DOOR",
+                "Reader": ""
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST2 DOOR 2 (YELLOW)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 2-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 3-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 4-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 2 -OUT DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN-PODIUM_P-1 TURNSTILE 3 -OUT DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 1-OUT DOOR",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "IN-PUN-PODIUM-ISTAR PRO-02",
+        "IP_address": "10.199.8.21",
+        "Location": "APAC",
+        "City": "Pune Podium",
+        "Doors": [
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_MDF Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_IT STORE ROOM-DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_GSOC DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_REPRO STORE-DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_CONTROL PANEL ROOM-DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_PREACTION ROOM-DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_RECEPTION ENTRY-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_RECEPTION ENTRY-DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_TESTING LAB-DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_RED_RECEPTION TO WS ENTRY 1-DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_RED_RECEPTION TO WS ENTRY 1-DOOR NEW",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_MAIN LIFT LOBBY-DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_MAIN LIFT LOBBY-DOOR NEW",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST 1 DOOR 2 (YELLOW)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST 1 DOOR 2 (YELLOW)",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_P-1 TURNSTILE 4 -OUT DOOR",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "IN-PUN-PODIUM-ISTAR PRO-03",
+        "IP_address": "10.199.10.15",
+        "Location": "APAC",
+        "City": "Pune Podium",
+        "Doors": [
+            {
+                "Door": "APAC_IN_PUN_PODIUM_GREEN-_IDF ROOM 1-Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_GREEN_UPS ENTRY 1-DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_GREEN_UPS ENTRY 2-DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_GREEN_LOCKER HR STORE 3-DOOR Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST4 DOOR 2 (GREEN)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST4 DOOR 1 (ORANGE)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_GREEN-MAIN LIFT LOBBY-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST3 DOOR 2 (GREEN)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_GREEN_RECEPTION ENTRY-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_GREEN_RECEPTION ENTRY-DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ORANGE_RECEPTION ENTRY-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ORANGE_RECEPTION ENTRY-DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ST3_DOOR 1 (ORANGE)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ORANGE_MAIN LIFT LOBBY-DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ORANGE-IDF ROOM 3-Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "IN-PUN-PODIUM-ISTAR ULTRA-4",
+        "IP_address": "10.199.8.30",
+        "Location": "APAC",
+        "City": "Pune Podium",
+        "Doors": [
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_FIRE EXIT 1-DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_YELLOW_FIRE EXIT 1-DOOR NEW",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_RED_RECREATION AREA FIRE EXIT 1-DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_RED_RECREATION AREA FIRE EXIT 1-DOOR NEW",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_MAIN PODIUM RIGHT ENTRY-DOOR NEW",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_MAIN PODIUM LEFT ENTRY-DOOR NEW",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "IN-PUN-PODIUM-ISTAR ULTRA-5",
+        "IP_address": "10.199.10.150",
+        "Location": "APAC",
+        "City": "Pune Podium",
+        "Doors": [
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_PODIUM_ORANGE_KITCHENETTE FIRE EXIT-DOOR NEW",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "IN-PUN-TOWER B-ISTAR ULTRA G2-CONTROLLER 1",
+        "IP_address": "10.199.16.40",
+        "Location": "APAC",
+        "City": "Pune Tower B",
+        "Doors": [
+            {
+                "Door": "APAC_IN_PUN_TOWER B_MAIN RECEPTION DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_MAIN RECEPTION DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_LIFT LOBBY DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST6_GYM SIDE DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST6_GYM SIDE DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST6_WKS SIDE DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST6_WKS SIDE DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST5_KAPIL DEV DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST5_KAPIL DEV DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST5_WKS SIDE DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST5_WKS SIDE DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_RECEPTION LEFT DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_RECEPTION LEFT DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_RECEPTION RIGHT DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_RECEPTION RIGHT DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST5_FIRE EXIT DOOR",
+                "Reader": ""
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_ST6_FIRE EXIT DOOR",
+                "Reader": ""
+            }
+        ]
+    },
+    {
+        "controllername": "IN-PUN-TOWER B-ISTAR ULTRA G2-CONTROLLER 2",
+        "IP_address": "10.199.16.41",
+        "Location": "APAC",
+        "City": "Pune Tower B",
+        "Doors": [
+            {
+                "Door": "APAC_IN_PUN_TOWER B_IBMS ROOM",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_UPS ROOM",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_MDF ROOM",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_PAC ROOM",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_SITE OPS STORE",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_GYM ROOM",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_MOBILE LAB",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_MOBILE LAB",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_INNOVATION CENTER",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_IN_PUN_TOWER B_INNOVATION CENTER",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "APAC_JP_TOKYO_7TH FLOOR_ISTAR PRO_01",
+        "IP_address": "10.192.2.11",
+        "Location": "APAC",
+        "City": "Japan Tokyo",
+        "Doors": [
+            {
+                "Door": "APAC_JPN_Tokyo_7th FLR_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_JPN_Tokyo_7th FLRSide Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_JPN_Tokyo_7th FLR_Side Entrance to Back Office",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_JPN_Tokyo_7th FLR_IT Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_JPN_Tokyo_7th FLR_Office Entrance",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "APAC_MY_KUALA LUMPUR_ISTAR ULTRA_CONTROLLER_01",
+        "IP_address": "10.192.4.11",
+        "Location": "APAC",
+        "City": "Kuala lumpur",
+        "Doors": [
+            {
+                "Door": "APAC_MY_KL_MAIN ENTRANCE DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_MY_KL_INTERIOR RECEPTION DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_MY_KL_SIDE ENTRANCE DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_MY_KL_PANTRY ENTRANCE DOOR NEW",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_MY_KL_SERVER ROOM DOOR",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "APAC_PH_MANILA_ 6TH FLOOR_ ISTAR ULTRA SE_01",
+        "IP_address": "10.193.133.11",
+        "Location": "APAC",
+        "City": "Quezon",
+        "Doors": [
+            {
+                "Door": "APAC_PH_Manila_6th Floor Enrty Door 1",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor Enrty Door 1",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Entry Door 2",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Entry Door 2",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor Open Office 2",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor Open Office 2",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_UPS/Switch Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Mothers Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Entry Door 3",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Entry Door 3",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Print Area",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Print Area",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_IDF Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Exit Corridor",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_6th Floor_Exit Corridor",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "APAC_PH_MANILA_ 7TH FLOOR_ISTAR ULTRA SE_02",
+        "IP_address": "10.193.132.140",
+        "Location": "APAC",
+        "City": "Quezon",
+        "Doors": [
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Recption Door 1-701",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Recption Door 1-701",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Recption Door 2-701",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Recption Door 2-701",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Open Office Door 1-721",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Open Office Door 1-721",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_MDF-726 Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Security Room-723",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Open Office Door 2-721",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Open Office Door 2-721",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Pantry-720a",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Pantry-720a",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_IT Work Room  725",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Exit Corridore-704",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Exit Corridore-704",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "APAC_PH_Manila_7th Floor_Directors Office-708",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "APAC_PH_MANILA_ISTAR PRO_01",
+        "IP_address": "10.194.2.13",
+        "Location": "APAC",
+        "City": "Taguig City",
+        "Doors": [
+            {
+                "Door": "APAC_PI_Manila_DR_MainEntrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PI_Manila_DR_OfficeLobby",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PI_Manila_DR_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PI_Manila_DR_StorageRm",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "APAC_PI_Manila_Emerg Exit Dr- Lobby",
+                "Reader": ""
+            },
+            {
+                "Door": "APAC_PI_Manila_Emgerg DR_Storage RM",
+                "Reader": ""
+            }
+        ]
+    },
+    {
+        "controllername": "AUT.VIE ICON Edge.Panel 2.11Floor",
+        "IP_address": "10.128.203.5",
+        "Location": "EMEA",
+        "City": "Austria, Vienna",
+        "Doors": [
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_WUPSIL to WUIB Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_WUPSIL to WUIB Kitchen Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_WUIB to WUIB Restricted Door",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "AUT.VIE ICON Ultra.Panel1. 11Floor",
+        "IP_address": "10.128.203.4",
+        "Location": "EMEA",
+        "City": "Austria, Vienna",
+        "Doors": [
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_RECEPTION Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_Reception to WUIB Restrict",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_WUPSIL Main Entrance Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_Vendor to WUPSIL Entrance Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_WUPSIL Side Storage Room Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_SERVER ROOM 1 Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_Vendor to WUIB Entrance Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_WUIB Restricted Main Entrance 2 Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_Vendor to WUIB Restricted Entrance 2 Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_SERVER ROOM 2 Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_IT Storage Room Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_Vendor to WUIB Restricted Entrance 1 Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_WUIB Restricted Main Entrance 1 Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_AUT_VIENNA_ICON_11FLR_WUIB Main Entrance Door",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "EMEA_UAE_DUBAI_PANEL NEW",
+        "IP_address": "10.130.36.56",
+        "Location": "EMEA",
+        "City": "Dubai",
+        "Doors": [
+            {
+                "Door": "EMEA_UAE_DUB_Main Entrance Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_UAE_DUB_Main Entrance Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_UAE_DUB_Rear Entrance Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_UAE_DUB_Rear Entrance Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_UAE_DUB_Pantry Entrance Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_UAE_DUB_Pantry Entrance Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_UAE_DUB_IDF Room Door",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "ES MADRID NEW CONTROLLER",
+        "IP_address": "10.128.194.102",
+        "Location": "EMEA",
+        "City": "Madrid",
+        "Doors": [
+            {
+                "Door": "ES MADRID MAIN DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "ES MADRID MAIN DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "ES MADRID SERVER ROOM",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "IE.Dublin.Cluster 02_controller 01",
+        "IP_address": "10.128.218.107",
+        "Location": "EMEA",
+        "City": "Ireland, Dublin",
+        "Doors": [
+            {
+                "Door": "EMEA_IRE_DUB_Balcony Door From the Kitchen 1",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Balcony Door From Kitchen 2",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Side Balcony Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Vender Elevator Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Vender Elevator Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Server Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Office to Stairwell Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_IRE_DUB_Office to Stairwell Door",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "IT.Rome.controller 3",
+        "IP_address": "10.131.106.134",
+        "Location": "EMEA",
+        "City": "Italy, Rome",
+        "Doors": [
+            {
+                "Door": "EMEA_Rome_Emergency Exit Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_Rome_Emergency Exit Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_Rome_Server Room Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_Rome_Server Room Restricted Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_Rome_Main Entrance Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_Rome_Main Entrance Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_Rome_Secondary Main Entrance Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_Rome_Secondary Main Entrance Door",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT  VNO Gama Panel 01",
+        "IP_address": "10.138.161.10",
+        "Location": "EMEA",
+        "City": "Gama Building",
+        "Doors": []
+    },
+    {
+        "controllername": "LT.VNO Delta.Panel 04",
+        "IP_address": "10.138.33.7",
+        "Location": "EMEA",
+        "City": "Delta Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Speedgate Middle IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Speedgate Middle OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Speedgate Right IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Speedgate Left OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Speedgate Left IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Speedgate Right OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Speedgate Card Collector",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_ Delta_6th Floor_East Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_6th Floor_West Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_9th Floor_East Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_9th Floor_West Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_8th Floor_East Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_8th Floor_West Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_5th Floor_East Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_5th Floor_West Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_4th Floor_East Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_4th Floor_West Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_3th Floor_East Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_3th Floor_West Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_2th Floor_East Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_2th Floor_West Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Recreation Area Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Lobby Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Conference Hall Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_East Stairway Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_West Stairway Emergency  Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_1st Floor_Central Stairway Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Service Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Service Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_DELTA_6th Floor_Office Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Barbora doors",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Barbora doors",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Zygimantas Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Zygimantas Door",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO Delta.Panel 1",
+        "IP_address": "10.138.33.4",
+        "Location": "EMEA",
+        "City": "Delta Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_9th Floor_Elevator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_9th Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_9th Floor_Supply Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_9th Floor_Server Room Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_8th Floor_Elevator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_8th Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_8th Floor_Supply Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_8th Floor_Server Room Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_7th Floor_Elevator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_7th Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_7th Floor_Supply Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_7th Floor_Server Room Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_6th Floor_Elevator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_6th Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_DELTA_6th_Floor_HR Archive",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_6th Floor_Server Restricted Door",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO Delta.Panel 2",
+        "IP_address": "10.138.33.5",
+        "Location": "EMEA",
+        "City": "Delta Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_5th Floor_IT Lab",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_5th Floor_Elevator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_5th Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_5th Floor_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_4th Floor_Elevator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_4th Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_4th Floor_Supply Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_4th Floor_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_3rd Floor_Elevator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_3rd Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_3rd Floor_Supply Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_3rd Floor_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_2nd Floor_Elevator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_2nd Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_2nd Floor_Supply Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_2nd Floor_Server Restricted Door",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO Delta.Panel 3",
+        "IP_address": "10.138.33.6",
+        "Location": "EMEA",
+        "City": "Delta Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Main Entrance Tambour",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_Ground Floor_UPS Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Elevator Lobby West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Training Center West",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Security Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Service Entrance Tambour",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Training Center East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_Basement Elevator Lobby",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_Basement Elevator Lobby",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_Basement Fire Suppression Argon canister storage",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_5th Floor_Fire Suppression Argon canister storage",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_DELTA_1st Floor_Eleveator Lobby East",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_7th Floor_East Side Emergency Exit",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_Delta_7th Floor_West Side Emergency Exit",
+                "Reader": ""
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO Gama.Panel 02",
+        "IP_address": "10.138.161.11",
+        "Location": "EMEA",
+        "City": "Gama Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_1st Floor_Community Space",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_1st Floor_Community Space",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_1st Floor_Secondary Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_1st Floor_UPS Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_1st Floor_Emergency Door East",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_1st Floor_Emergency Door North",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_1st Floor_Emergency Door West",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_2nd Floor_East Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_2nd Floor_East Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_2nd floor_West Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_2nd floor_West Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_2nd Floor_IDF Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_2nd Floor Emergency stairway Door 1",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_2nd Floor_Emergency stairway Door 2",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Storage",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_-1st Floor_Elevator Lobby",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LTU_VNO_GAMA_-1st Floor_Elevator Lobby",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO Gama.Panel 03",
+        "IP_address": "10.138.161.6",
+        "Location": "EMEA",
+        "City": "Gama Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LT_VNO_GAMA_6th Flr_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_6th Flr_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_6th Flr_Emergency Exit Door",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMAEMEA_8th Flr_Emergency Exit Door",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMAEMEA_9th Flr_Emergency Exit Door",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_6th Flr_Storage",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_7th Flr_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_7th Flr_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMAEMEA_7th Flr_Emergency Exit Door",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_7th Flr_Storage 1",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_7th Flr_Storage 2",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_7th Flr_Test Lab",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO Gama.Panel 04",
+        "IP_address": "10.138.161.7",
+        "Location": "EMEA",
+        "City": "Gama Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LT_VNO_GAMA_8th Flr_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_8th Flr_Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_8th Flr_Stairway",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_8th Flr_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_ 8th Flr Storage",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_9th Flr_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_9th Flr_Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_9th Flr_Stairway",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_9th Flr_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_9th Flr_Storage",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LT.VNO.GAMA.Panel05.Reset Ultra Output15",
+                "Reader": ""
+            },
+            {
+                "Door": "LT.VNO.GAMA.Panel07.Reset Ultra Output16",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_6th Flr_Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_6th Flr_Stairway",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_7th Flr_Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_7th Flr_Stairway",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO Gama.Panel 08",
+        "IP_address": "10.138.161.13",
+        "Location": "EMEA",
+        "City": "Gama Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Emergency Exit Door",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Parking Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Security Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Parking",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Parking",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Restaurant Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Lift Lobby",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Lift Lobby",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Bikes Storage",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Turnstile1 Entry",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Turnstile2 Entry",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Turnstile3 Entry",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Turnstile1 Exit",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Turnstile2 Exit",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Turnstile3 Exit",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Info Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Info Room",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Turnstile Fire Control",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_WU Shop",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO.Gama Panel 06",
+        "IP_address": "10.138.161.8",
+        "Location": "EMEA",
+        "City": "Gama Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LT_VNO_GAMA_EMEA_3rd Flr Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_EMEA_3rd Flr Stairway",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMAEMEA_3rd Flr_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMAEMEA_3rd Flr_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_EMEA_3rd Flr_Emergency Exit Door",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_4th Flr_Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_4th Flr_Stairway",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_4th Flr_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMAEMEA_4th Flr_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_4th Flr_Emergency Exit Door",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_EMEA_5th Flr_Stairway",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_EMEA_5th Flr_Stairway",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_5th Flr_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMAEMEA_5th Flr_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMAEMEA_5th Flr_Emergency Exit Door",
+                "Reader": ""
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_2nd Flr_Parking",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_2nd Flr_Parking",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_3rd Flr_Parking",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_4th Flr_Parking",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_5th Flr_Parking",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_2nd Flr_First Parking Door",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "LT.VNO.Gama.Panel 09",
+        "IP_address": "10.138.161.14",
+        "Location": "EMEA",
+        "City": "Gama Building",
+        "Doors": [
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Electrical room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st Flr_Stairway Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_1st/2nd Flr_Stairway Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_LT_VNO_GAMA_4th/5th Flr_Stairway Entrance",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "MA.Casablanca.Panel 01",
+        "IP_address": "10.129.83.12",
+        "Location": "EMEA",
+        "City": "Casablanca",
+        "Doors": [
+            {
+                "Door": "EMEA_MOR_CASA_07_01_Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_MOR_CASA_07_04_Server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_MOR_CASA_07_02_Reception",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_MOR_CASA_07_03_Comsroom",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_MOR_CASA_7th Floor_Emergency Exit",
+                "Reader": ""
+            }
+        ]
+    },
+    {
+        "controllername": "RU.Moscow.Panel 01",
+        "IP_address": "10.128.144.124",
+        "Location": "EMEA",
+        "City": "Moscow",
+        "Doors": [
+            {
+                "Door": "EMEA_RU_Moscow_main entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_RU_Moscow_training room entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_RU_Moscow_office entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_RU_Moscow_IT room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_RU_Moscow_server Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "EMEA_RU_Moscow_safe/cashier room",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "UK.London.Panel 01",
+        "IP_address": "10.128.178.110",
+        "Location": "EMEA",
+        "City": "London",
+        "Doors": [
+            {
+                "Door": "WU-UK-MH-MDF ROOM",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "WU-UK-MH-NORTH LIFT LOBBY ENTRY",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "WU-UK-MH-NORTH LIFT LOBBY ENTRY",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "WU-UK-MH-STAIRCORE MAIN ENTRY",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "WU-UK-MH-STAIRCORE MAIN ENTRY",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "WU-UK-MH-SOUTH LIFT LOBBY ENTRY",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "WU-UK-MH-SOUTH LIFT LOBBY ENTRY",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "WU-UK-MH-FIRE EXIT DOOR",
+                "Reader": ""
+            }
+        ]
+    },
+    {
+        "controllername": "AR.MonteVideo.Panel 01",
+        "IP_address": "10.65.32.98",
+        "Location": "LACA",
+        "City": "Argentina",
+        "Doors": [
+            {
+                "Door": "LACA ARG 1st Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 1st Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 1st Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 1st Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "AR_MonteVideo_DR_1stFlrCSC IN/OUT DELETE",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "AR_MonteVideo_DR_1stFlrCSC IN/OUT DELETE",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor HR 2nd Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor HR 2nd Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor IT Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor IT Room",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor 1ST Entrance HR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor 1ST Entrance HR",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "AR.MonteVideo.Panel 02",
+        "IP_address": "10.65.32.99",
+        "Location": "LACA",
+        "City": "Argentina",
+        "Doors": [
+            {
+                "Door": "LACA ARG 3rd Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 3rd Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 3rd Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 3rd Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 4th Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 4th Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 6th Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 6th Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 6th Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 6th Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 4th Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 4th Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor Risk & Credit  Finance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor Risk & Credit  Finance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor HR File",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 2nd Floor HR File",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "AR.MonteVideo.Panel 03",
+        "IP_address": "10.65.32.114",
+        "Location": "LACA",
+        "City": "Argentina",
+        "Doors": [
+            {
+                "Door": "LACA ARG 5th Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 5th Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 5th Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 5th Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 5th FloorTreasury",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 5th FloorTreasury",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 5th Floor IT Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 5th Floor IT Room",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 7th Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 7th Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 7th Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 7th Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 7th Floor IT Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 7th Floor IT Room",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 12TH Floor Terrace",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 12TH Floor Terrace",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "AR.MonteVideo.Panel 04",
+        "IP_address": "10.65.21.115",
+        "Location": "LACA",
+        "City": "Argentina",
+        "Doors": [
+            {
+                "Door": "LACA ARG 8th Floor Left Entrance Lunch Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 8th Floor Left Entrance Lunch Room",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 8th Floor Right Entrance Audience",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 8th Floor Right Entrance Audience",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 8th Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 8th Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 9th FLOOR Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 9th FLOOR Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 9th Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 9th Floor Emergency Stairs",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 10th Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 10th Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 10TH Floor Emergency Stairs",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 10TH Floor Emergency Stairs",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "AR.MonteVideo.Panel 05",
+        "IP_address": "10.65.32.116",
+        "Location": "LACA",
+        "City": "Argentina",
+        "Doors": [
+            {
+                "Door": "LACA ARG 12th Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 12th Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 12th Floor Rear entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG 12th Floor Rear entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "AR.MonteVideo.2 Floor. HHRR Archive.DR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "AR.MonteVideo.2 Floor. HHRR Archive.DR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG 12th Floor Emergency Stairs",
+                "Reader": ""
+            }
+        ]
+    },
+    {
+        "controllername": "AR.MonteVideo.New Panel",
+        "IP_address": "10.65.32.100",
+        "Location": "LACA",
+        "City": "Argentina",
+        "Doors": [
+            {
+                "Door": "LACA ARG MOLINETE 1 IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG MOLINETE 2 IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG MOLINETE 3 IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG MOLINETE 4 IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG PORTON",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA ARG PORTON",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG BUZON",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG MOLINETE 1 OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG MOLINETE 2 OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG MOLINETE 3 OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA ARG MOLINETE 4 OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "BR-SAO PAULO-ISTAR ULTRA G2-PANEL 01",
+        "IP_address": "10.64.10.50",
+        "Location": "LACA",
+        "City": "Brazil",
+        "Doors": [
+            {
+                "Door": "LACA BR 6TH IDF DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA BR 6TH IDF DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA BR 6TH FLOOR MAIN ENTRANCE DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA BR 6TH FLOOR MAIN ENTRANCE DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA BR 6TH FLOOR STORAGE DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA BR 6TH FLOOR STORAGE DOOR",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "Laroc A1 - iStar",
+        "IP_address": "172.21.143.3",
+        "Location": "LACA",
+        "City": "Costa Rica",
+        "Doors": [
+            {
+                "Door": "LACA CR A1 Main Lobby Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR A1 Main Lobby Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR A1 IT Room Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B1 Main Lobby Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B1 Main Lobby Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR B1 Crystal Emergency #1 CAFETERIA",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR B1 Crystal Emergency #4 SOUTH",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR B1 CRYSTAL EMERGENCY #3 SOUTH EAST",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR A1 Emergency Crystal Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR Shower Men Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR Shower Women Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B1 FITNESS Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B1 FITNESS Door",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "Laroc A2 - iStar",
+        "IP_address": "172.21.141.5",
+        "Location": "LACA",
+        "City": "Costa Rica",
+        "Doors": [
+            {
+                "Door": "LACA CR A2 Floor Crystal Emergency Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR A2 Emergency Elevators Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR A2 Emergency Elevators Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR A2 IT Room Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR A2 Main Lobby Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR A2 Main Lobby Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR A2 Lactation Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR A2 PCI DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "Prueba",
+                "Reader": ""
+            }
+        ]
+    },
+    {
+        "controllername": "Laroc A3 - iStar",
+        "IP_address": "172.21.139.5",
+        "Location": "LACA",
+        "City": "Costa Rica",
+        "Doors": [
+            {
+                "Door": "LACA CR A3 Floor Crystal Emergency Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR A3 Emergency Elevator Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR A3 Emergency Elevator Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR A3 IT Room Door borrar",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR A3 Main Lobby Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR A3 Main Lobby Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR A3 Contract File Door",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "Laroc B3 - iStar",
+        "IP_address": "172.21.125.5",
+        "Location": "LACA",
+        "City": "Costa Rica",
+        "Doors": [
+            {
+                "Door": "LACA CR B3 IT Room Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B3 Main Lobby Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B3 Main Lobby Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR B3 3RD Floor Emergency Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B3 3RD Floor Emergency Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR B3 3rd Floor Elevator Emergency Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B3 3rd Floor Elevator Emergency Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR B2 Emergency Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B2 Emergency Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR B2 Emergency Elevators Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B2 Emergency Elevators Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR B2 Security Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B2  Main Lobby Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR B2  Main Lobby Door",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "Laroc E3 iSTAR",
+        "IP_address": "10.64.23.142",
+        "Location": "LACA",
+        "City": "Costa Rica",
+        "Doors": [
+            {
+                "Door": "LACA CR E2 Main Lobby Door OLD",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E2 Emergency Elevators Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E2 Emergency Elevators Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR E3 Main Lobby OLD",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E3 Emergency Elevators Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E3 Emergency Elevators Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR E3 IT Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E2 Emergency Crystal Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR E4  Emergency Exit Elevators",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E4  Emergency Exit Elevators",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR E4 Emergency Crystal #21 Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR E3 Emergency Crystal",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR E4 Main Lobby Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E4 Main Lobby Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR E4  GPS STORAGE",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "Laroc E3-2",
+        "IP_address": "10.64.23.147",
+        "Location": "LACA",
+        "City": "Costa Rica",
+        "Doors": [
+            {
+                "Door": "LACA CR E3 Main Lobby",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E3 Main Lobby",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR E2 Main Lobby",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR E2 Main Lobby",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "Laroc F4 - iStar",
+        "IP_address": "172.21.132.240",
+        "Location": "LACA",
+        "City": "Costa Rica",
+        "Doors": [
+            {
+                "Door": "LACA CR F4 IT Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR F4 IT Lab Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR F4 Main Lobby Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR F4 Main Lobby Door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR F4 Emergency Elevators",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA CR F4 Emergency Elevators",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA CR F4 Emergency Exit Crystal",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "MX.Mexico City.17th.Controller 01",
+        "IP_address": "172.31.70.26",
+        "Location": "LACA",
+        "City": "Mexico",
+        "Doors": [
+            {
+                "Door": "LACA_MX DOOR-01 EMERGENCY EXIT",
+                "Reader": ""
+            },
+            {
+                "Door": "LACA_MX DOOR-02 MAIN ENTRANCE DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA_MX DOOR-02 MAIN ENTRANCE DOOR",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA_MX DOOR-03 FRONT DESK TO OFFICE",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA_MX DOOR-03 FRONT DESK TO OFFICE",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA_MX DOOR-04 ELECTRIC ROOM DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA_MX DOOR-05 SITE(IDF)IT ROOM Restricted Door",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "PA.Panama City. Panel 01",
+        "IP_address": "10.80.3.61",
+        "Location": "LACA",
+        "City": "Panama",
+        "Doors": [
+            {
+                "Door": "LACA PA Elevator",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PA Elevator",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA PA Reception",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PA. Parking door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PA. Parking door",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA PA. IT Room",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "PE.Lima.STA Cruz Panel 01",
+        "IP_address": "10.70.1.201",
+        "Location": "LACA",
+        "City": "Peru",
+        "Doors": [
+            {
+                "Door": "LACA PE 2nd Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PE 2nd Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA PE IT Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PE 3rd Floor Main Entrance",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PE 3rd Floor Main Entrance",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA PE Security",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PE Security",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "LACA PE 3rd Floor Terrace",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "PE.Lima.STA Cruz Panel 02",
+        "IP_address": "10.70.1.200",
+        "Location": "LACA",
+        "City": "Peru",
+        "Doors": [
+            {
+                "Door": "LACA PE 1st Floor Emergency",
+                "Reader": ""
+            },
+            {
+                "Door": "LACA  PE Generator Basement",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PE 3rd  Floor Emergency",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PE 2nd West Floor Emergency",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "LACA PE 2nd Floor Storage Room",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US. FL.MIAMI ULTRA CONTROLLER",
+        "IP_address": "10.21.8.66",
+        "Location": "NAMER",
+        "City": "Florida, Miami",
+        "Doors": [
+            {
+                "Door": "US.FL.MIAMI MAIN LOBBY DOOR 1",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.FL.MIAMI MAIN LOBBY DOOR 1",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.FL.MIAMI MAIN LOBBY DOOR 2 (NORTH ENTRANCE)",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.FL.MIAMI MAIN LOBBY DOOR 2 (NORTH ENTRANCE)",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.FL.MIAMI WEST DOOR ENTRANCE DOOR 3",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.FL.MIAMI WEST DOOR ENTRANCE DOOR 3",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.FL.MIAMI STORAGE ROOM",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.FL.MIAMI IDF ROOM",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.FL.MIAMI IT LAB ROOM DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.FL.MIAMI EMERGENCY EXIT DOOR",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.AUS. 01 CONTROLLER",
+        "IP_address": "10.21.0.66",
+        "Location": "NAMER",
+        "City": "Austin TX",
+        "Doors": [
+            {
+                "Door": "AUSTIN MAIN ENTRY",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "AUSTIN MAIN ENTRY",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "AUSTIN EAST ENTRY",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "AUSTIN EAST ENTRY",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "AUSTIN IDF ROOM DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "AUSTIN WEST ENTRY DOOR",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "AUSTIN WEST ENTRY DOOR",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 01 Panel 01",
+        "IP_address": "10.58.0.3",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 01. Focus Area North-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 01. Focus Area West-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 01. Retail North_10:03:1A",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 01 Panel 02",
+        "IP_address": "10.58.0.25",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 01. Focus Area North-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 01. Focus Area West-OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 06 Panel 01",
+        "IP_address": "10.58.7.7",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ.06. Mail Room_11:00:17",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. North Entry-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. Security Control Room_11:01:22 Restricted door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. EUC Lab Storage_11:01:CA",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. IT Work Lab_11:01:99",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. E-Waste Storage_11:01:96",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. EUC Lab Door_11:01:D4",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. East Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. MDF Room_11:00:D5 Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. Fitness Center East_11:01:02",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. South Center Hall Entry-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. Fitness Center West_11:01:B9",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. South Entrance-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. Morse Studio",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 06 Panel 02",
+        "IP_address": "10.58.7.25",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 06. North Entry-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. East Stairwell-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. South Center Hall Entry-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 06. South Entrance-OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 09 Panel 01",
+        "IP_address": "10.58.23.3",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 09. IDF Room_11:00:98 Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. Storage Room_11:01:05",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. South Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. Freight Elevator Lobby-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. Wellness Room_11:01:E1",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. North Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. North Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. South Lobby Doors-IN",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 09 Panel 02",
+        "IP_address": "10.58.23.25",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 09. Freight Elevator Lobby-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. North Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. North Stairwell-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. South Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 09. South Stairwell-OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 11 Panel 01",
+        "IP_address": "10.58.39.3",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 11. IDF Room_11:01:42 Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. Storage Room_11:01:DD",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. North Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. Freight Elevator Lobby-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. Quiet Room_11:01:0E",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. South Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. North Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. South Lobby Doors-IN",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 11 Panel 02",
+        "IP_address": "10.58.39.35",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 11. Freight Elevator Lobby-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. North Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. North Stairwell-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. South Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 11. South Stairwell-OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 12 Panel 01",
+        "IP_address": "10.58.47.3",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 12. South Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. IDF Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. Storage Room_11:01:0A",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. North Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. Freight Elevator Lobby-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. Mothers Room_11:01:CC",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. South Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 01 Lobby Enrollment Reader_11:01:59",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. North Lobby Doors-IN",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 12 Panel 02",
+        "IP_address": "10.58.47.35",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 12. Freight Elevator Lobby-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. North Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. North Stairwell-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. South Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 12. South Stairwell-OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 13 Panel 01",
+        "IP_address": "10.58.55.3",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 13. Freight Elevator Lobby-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. South Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. North Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. IDF Room_11:01:8C Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. North Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. Storage Room_11:01:75",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. Mothers Room_11:01:A3",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. South Stairwell-IN",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 13 Panel 02",
+        "IP_address": "10.58.55.35",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 13. Freight Elevator Lobby-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. North Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. North Stairwell-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. South Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 13. South Stairwell-OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 14 Panel 01",
+        "IP_address": "10.58.63.3",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 14. North Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. South Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. North Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. Storage Room",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. IDF Room_11:01:0F Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. Freight Elevator Lobby-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14 AV Support_11:01:6E",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. Wellness Room_11:01:B0",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. South Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. Catering Pantry North Door_11:01:00",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. Catering Pantry South Door_11:01:19",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 14 Panel 02",
+        "IP_address": "10.58.63.35",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 14. Freight Elevator Lobby-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. North Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. North Stairwell-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. South Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 14. South Stairwell-OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 15 Panel 01",
+        "IP_address": "10.58.74.3",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 15. North Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Executive Entrance_10:03:9F",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Exec Admins Entrance_10:04:4F",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. West Storage_10:06:6F",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. South Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Freight Elevator Lobby Left-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. IDF Room_11:01:97 Restricted Door",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. South Lobby Doors-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Freight Elevator Lobby East Door-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Freight Elevator Lobby Right Door-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. North Stairwell-IN",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Wellness Room_11:00:24",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. AV Support Room_11:01:56",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Catering Kitchen_11:01:AE",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 15 Panel 02",
+        "IP_address": "10.58.74.5",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 15.Training Storage Room_11:01:90",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. 15th Floor North Storage 15.430",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. 15th Floor Executive Southwest Entrance 15.312A",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. 15th Floor Executive South Entrance 15.312B",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. 15th Floor Executive Southeast Entrance 15.313",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. 15th Floor Sibley Conference Room Southwest Entrance 15.201A",
+                "Reader": "in:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. 15th Floor Sibley Conference Room Southeast Entrance 15.201B",
+                "Reader": "in:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.CO.OBS 15 Panel 03",
+        "IP_address": "10.58.74.45",
+        "Location": "NAMER",
+        "City": "Denver Colorado",
+        "Doors": [
+            {
+                "Door": "US.CO.HQ. 15. Freight Elevator Lobby East Door-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Freight Elevator Lobby Left-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. Freight Elevator Lobby Right Door-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. North Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. North Stairwell-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. South Lobby Doors-OUT",
+                "Reader": "out:1"
+            },
+            {
+                "Door": "US.CO.HQ. 15. South Stairwell-OUT",
+                "Reader": "out:1"
+            }
+        ]
+    },
+    {
+        "controllername": "US.NYC.199 Water St",
+        "IP_address": "10.21.4.66",
+        "Location": "NAMER",
+        "City": "NEW YORK",
+        "Doors": []
+    }
+]

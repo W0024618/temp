@@ -1,213 +1,393 @@
-// require("dotenv").config();
-// const express = require("express");
-// const cors = require("cors");
-// const bodyParser = require("body-parser");
-// const fs = require("fs");
-// const { pingHost } = require("./services/pingService");
-// const { DateTime } = require("luxon");
-// const regionRoutes = require("./routes/regionRoutes");
-// const { fetchAllIpAddress, ipRegionMap } = require("./services/excelService");
-// const path = require("path");
+C:\Users\W0024618\Desktop\NewFrontend\Device Dashboard\controllers.html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Access Control Dashboard</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="controllers.css">
+</head>
+
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar" style="display: none;">
+    <div class="sidebar-header">
+      <div class="logo">
+        <i class="fas fa-door-open"></i>
+        <span>Access Control</span>
+      </div>
+    </div>
+
+    <ul class="sidebar-menu">
+      <li class="menu-item active">
+        <i class="fas fa-th-large"></i>
+        <span class="menu-text">Dashboard</span>
+      </li>
+
+    </ul>
+
+    <div class="sidebar-footer">
+      <p>© 2025</p>
+      <p><strong>Western Union Services India Pvt Ltd.</strong></p>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content" id="mainContent">
+
+    <!-- Top Bar -->
+    <div class="top-bar" style="display: none;">
+      <button class="toggle-sidebar" id="toggleSidebar">
+        <i class="fas fa-bars"></i>
+      </button>
+
+      <div class="user-info">
+        <div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Content Area -->
+    <div class="content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Access Control Dashboard</h1>
+        </div>
+
+        <div class="page-actions">
+          <button class="btn btn-outline" id="refreshBtn">
+          </button>
+          <button class="btn btn-primary">
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <section class="summary-section">
+        <div class="summary-card">
+          <div class="summary-icon">
+            <i class="fas fa-server"></i>
+          </div>
+          <div class="summary-content">
+            <h3>Total Controllers</h3>
+            <p id="totalControllers">0</p>
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-icon">
+            <i class="fas fa-plug-circle-bolt"></i>
+          </div>
+          <div class="summary-content">
+            <h3>Online Controllers</h3>
+            <p id="onlineControllers">0</p>
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-icon">
+            <i class="fas fa-door-closed"></i>
+          </div>
+          <div class="summary-content">
+            <h3>Total Doors</h3>
+            <p id="totalDoors">0</p>
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-icon">
+            <i class="fas fa-id-badge"></i>
+          </div>
+          <div class="summary-content">
+            <h3>Total Readers</h3>
+            <p id="totalReaders">0</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Filters -->
+      <div class="filters-container">
+        <select class="filter-select" id="locationFilter">
+          <option value="">All Locations</option>
+        </select>
+
+        <select class="filter-select" id="cityFilter">
+          <option value="">All Cities</option>
+        </select>
+
+        <select class="filter-select" id="statusFilter">
+          <option value="">All Status</option>
+          <option value="Online">Online</option>
+          <option value="Offline">Offline</option>
+        </select>
+      </div>
+
+      <!-- Search Bar -->
+      <div class="search-container">
+        <i class="fas fa-search search-icon"></i>
+        <input type="text" id="controllerSearch" placeholder="Search by controller, door, or reader..." />
+      </div>
+
+      <!-- Controllers Grid -->
+      <section id="controller-list" class="controller-grid">Loading controllers...</section>
+
+      <!-- Chart Section -->
+      <section class="chart-section">
+        <div class="chart-header">
+          <h3>Controller Status Overview</h3>
+          <div class="chart-actions">
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="statusChart"></canvas>
+        </div>
+      </section>
 
 
-// const app = express();
+    </div>
+  </div>
 
-// const HOST = "0.0.0.0";
+  <script>
+    // Sidebar toggle functionality
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.getElementById('mainContent');
+    const toggleSidebar = document.getElementById('toggleSidebar');
 
-// // Your username and password (you should ideally store these securely)
-// const USERNAME = 'admin';
-// const PASSWORD = '12345';
+    toggleSidebar.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      mainContent.classList.toggle('expanded');
+    });
 
-// // Middleware to check basic auth
-// function basicAuthMiddleware(req, res, next) {
-//   const user = basicAuth(req);
+    // Mobile sidebar toggle
+    function handleResize() {
+      if (window.innerWidth <= 768) {
+        sidebar.classList.add('collapsed');
+        mainContent.classList.add('expanded');
+      } else {
+        sidebar.classList.remove('collapsed');
+        mainContent.classList.remove('expanded');
+      }
+    }
 
-//   if (!user || user.name !== USERNAME || user.pass !== PASSWORD) {
-//       res.setHeader('WWW-Authenticate', 'Basic realm="Authorization required"');
-//       return res.status(401).send('Access denied');
-//   }
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial check
 
-//   next();
-// }
+    // ✅ Dynamic API fetch (replaces static controllersData)
+    let controllersData = [];
 
-// // Use the authentication middleware globally
-// app.use(basicAuthMiddleware);
+    async function loadControllers() {
+      try {
+        const res = await fetch('http://localhost/api/controllers/status');
+        const data = await res.json();
+        controllersData = data;
+
+        renderFilters();
+        renderSummary(controllersData);
+        renderControllers(controllersData);
+        renderChart(controllersData);
+        setupEventListeners();
+      } catch (err) {
+        console.error(err);
+        document.getElementById('controller-list').innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--danger);">
+          <i class="fas fa-exclamation-triangle" style="font-size: 3rem; margin-bottom: 15px;"></i>
+          <h3>Failed to load data</h3>
+          <p>Please check your API connection and try again.</p>
+        </div>
+      `;
+      }
+    }
+
+    // Render filter options dynamically
+    
+    function renderFilters() {
+      const locationFilter = document.getElementById('locationFilter');
+      const cityFilter = document.getElementById('cityFilter');
+
+      locationFilter.innerHTML = '<option value="">All Locations</option>';
+      cityFilter.innerHTML = '<option value="">All Cities</option>';
+
+      const locations = [...new Set(controllersData.map(c => c.Location))];
+      const cities = [...new Set(controllersData.map(c => c.City))];
+
+      locations.forEach(location => {
+        const option = document.createElement('option');
+        option.value = location;
+        option.textContent = location;
+        locationFilter.appendChild(option);
+      });
+
+      cities.forEach(city => {
+        const option = document.createElement('option');
+        option.value = city;
+        option.textContent = city;
+        cityFilter.appendChild(option);
+      });
+    }
+
+    // Render summary cards
+    function renderSummary(data) {
+      const total = data.length;
+      const online = data.filter(c => c.controllerStatus.toLowerCase() === 'online').length;
+      const doors = data.reduce((sum, c) => sum + c.Doors.length, 0);
+      const readers = data.reduce((sum, c) => sum + c.Doors.filter(d => d.Reader).length, 0);
+
+      document.getElementById('totalControllers').textContent = total;
+      document.getElementById('onlineControllers').textContent = online;
+      document.getElementById('totalDoors').textContent = doors;
+      document.getElementById('totalReaders').textContent = readers;
+    }
+
+    // Render controllers grid
+    function renderControllers(data) {
+      const container = document.getElementById('controller-list');
+      container.innerHTML = '';
+
+      if (data.length === 0) {
+        container.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-light);">
+          <i class="fas fa-search" style="font-size: 3rem; margin-bottom: 15px;"></i>
+          <h3>No matching controllers found</h3>
+          <p>Try adjusting your search or filter terms</p>
+        </div>
+      `;
+        return;
+      }
+
+      data.forEach(ctrl => {
+        const card = document.createElement('div');
+        const isOnline = ctrl.controllerStatus.toLowerCase() === 'online';
+        card.classList.add('controller-card');
+        if (!isOnline) card.classList.add('offline');
+
+        const statusClass = isOnline ? 'status-online' : 'status-offline';
+
+        card.innerHTML = `
+        <div class="controller-header">
+          <div class="controller-title">
+            <i class="fas fa-server"></i>
+            <h3>${ctrl.controllername}</h3>
+          </div>
+          <span class="status-badge ${statusClass}">${ctrl.controllerStatus}</span>
+        </div>
+        <div class="controller-info">
+          <div class="controller-info-row">
+            <i class="fas fa-network-wired"></i>
+            <span>${ctrl.IP_address}</span>
+          </div>
+          <div class="controller-info-row">
+            <i class="fas fa-map-marker-alt"></i>
+            <span>${ctrl.Location} - ${ctrl.City}</span>
+          </div>
+        </div>
+        <div class="door-grid">
+          ${ctrl.Doors.map(d => `
+            <div class="door-card">
+              <div class="door-name">${d.Door}</div>
+              <div class="door-info">
+                <i class="fas fa-id-badge"></i> 
+                <span>${d.Reader || 'N/A'}</span>
+              </div>
+              <div class="door-status ${d.status.toLowerCase() === 'online' ? 'status-on' : 'status-off'}">
+                <i class="fas fa-signal"></i> 
+                <span>${d.status}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+        container.appendChild(card);
+      });
+    }
+
+    // Render status chart
+    function renderChart(data) {
+      const online = data.filter(c => c.controllerStatus.toLowerCase() === 'online').length;
+      const offline = data.length - online;
+
+      const ctx = document.getElementById('statusChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Online', 'Offline'],
+          datasets: [{
+            data: [online, offline],
+            backgroundColor: ['#2dce89', '#f5385c'],
+            borderWidth: 0,
+            hoverOffset: 10
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                padding: 20,
+                usePointStyle: true,
+                font: { size: 13 }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              padding: 12,
+              cornerRadius: 8
+            }
+          },
+          cutout: '70%'
+        }
+      });
+    }
+
+    // Setup search + filter listeners
+    function setupEventListeners() {
+      document.getElementById('controllerSearch').addEventListener('input', filterControllers);
+      document.getElementById('locationFilter').addEventListener('change', filterControllers);
+      document.getElementById('cityFilter').addEventListener('change', filterControllers);
+      document.getElementById('statusFilter').addEventListener('change', filterControllers);
+      document.getElementById('refreshBtn').addEventListener('click', loadControllers);
+    }
+
+    // Filter controllers dynamically
+    function filterControllers() {
+      const searchTerm = document.getElementById('controllerSearch').value.toLowerCase();
+      const locationFilter = document.getElementById('locationFilter').value;
+      const cityFilter = document.getElementById('cityFilter').value;
+      const statusFilter = document.getElementById('statusFilter').value;
+
+      const filtered = controllersData.filter(c => {
+        const matchesSearch = searchTerm === '' ||
+          c.controllername.toLowerCase().includes(searchTerm) ||
+          c.IP_address.toLowerCase().includes(searchTerm) ||
+          c.Doors.some(d =>
+            d.Door.toLowerCase().includes(searchTerm) ||
+            (d.Reader && d.Reader.toLowerCase().includes(searchTerm))
+          );
+
+        const matchesLocation = locationFilter === '' || c.Location === locationFilter;
+        const matchesCity = cityFilter === '' || c.City === cityFilter;
+        const matchesStatus = statusFilter === '' || c.controllerStatus === statusFilter;
+
+        return matchesSearch && matchesLocation && matchesCity && matchesStatus;
+      });
+
+      renderControllers(filtered);
+      renderSummary(filtered);
+    }
+
+    // ✅ Initialize dashboard (fetches from API)
+    loadControllers();
+  </script>
 
 
 
-// // Helpers
-// function pruneOldEntries(entries, days = 30) {
-//   const cutoff = DateTime.now().minus({ days }).toMillis();
-//   return entries.filter(e => DateTime.fromISO(e.timestamp).toMillis() >= cutoff);
-// }
-// function getLogFileForDate(dt) {
-//   return `./deviceLogs-${dt.toISODate()}.json`;
-// }
 
+</body>
 
-
-// app.use(cors());
-// app.use(express.json());
-
-// app.use(cors({
-//   origin:"*",
-//   methods:"GET,POST,PUT,DELETE",
-//   allowedHeaders:"Content-Type,Authorization"
-// }));
-
-// app.use(bodyParser.json());
-
-
-// app.use('/Frontend/Device Dashboard',express.static(path.join(__dirname, '../../Frontend/Device Dashboard')));
-
-
-
-// // serve everything in public/ as static files
-
-// app.use(
-//   '/dashboard',
-//   express.static(path.join(__dirname,'../../Frontend/Device Dashboard'))
-// );
-
-// app.get('/health',(req,res)=>{
-//   res.json({status:'up' });
-// });
-
-// app.use('/api/regions',regionRoutes);
-// // fallback to frontend  index.html
-
-// app.get('/Frontend/Device Dashboard/*', (req, res)=>{
-//   res.sendFile(path.join(__dirname, '../../Frontend/Device Dashboard/index.html'));
-// })
-
-
-// // Device Status Tracking
-// const devices = fetchAllIpAddress();
-// let deviceStatus = {};
-
-// // Load only today's logs
-// const today = DateTime.now().setZone("Asia/Kolkata");
-// const todayLogFile = getLogFileForDate(today);
-// let todayLogs = fs.existsSync(todayLogFile)
-//   ? JSON.parse(fs.readFileSync(todayLogFile, "utf8"))
-//   : {};
-
-// // Persist today's logs
-// function saveTodayLogs() {
-//   fs.writeFileSync(todayLogFile, JSON.stringify(todayLogs, null, 2));
-// }
-
-// // Log a status change
-// function logDeviceChange(ip, status) {
-//   const timestamp = DateTime.now().setZone("Asia/Kolkata").toISO();
-//   const arr = (todayLogs[ip] = todayLogs[ip] || []);
-//   const last = arr[arr.length - 1];
-//   if (!last || last.status !== status) {
-//     arr.push({ status, timestamp });
-//     todayLogs[ip] = pruneOldEntries(arr, 30);
-//     saveTodayLogs();
-//   }
-// }
-
-// // Ping devices
-//  async function pingDevices() {
-//   const limit = require("p-limit")(20);
-//   await Promise.all(
-//     devices.map(ip =>
-//       limit(async () => {
-//         const newStatus = await pingHost(ip);
-//         if (deviceStatus[ip] !== newStatus) {
-//           logDeviceChange(ip, newStatus);
-//         }
-//         deviceStatus[ip] = newStatus;
-//       })
-//     )
-//   );
-//   console.log("Updated device status:", deviceStatus);
-//  }
-
-// // Start ping loop
-// setInterval(pingDevices, 12_0000); //60_000
-// pingDevices();
-
-// // Real‑time status
-// app.get("/api/region/devices/status", (req, res) => {
-//   res.json(deviceStatus);
-// });
-
-
-// // Full history: stitch together all daily files
-// app.get("/api/devices/history", (req, res) => {
-//   const files = fs.readdirSync(".")
-//     .filter(f => f.startsWith("deviceLogs-") && f.endsWith(".json"));
-//   const combined = {};
-//   for (const f of files) {
-//     const dayLogs = JSON.parse(fs.readFileSync(f, "utf8"));
-//     for (const ip of Object.keys(dayLogs)) {
-//       combined[ip] = (combined[ip] || []).concat(dayLogs[ip]);
-//     }
-//   }
-//   // prune to last 30 days
-//   for (const ip of Object.keys(combined)) {
-//     combined[ip] = pruneOldEntries(combined[ip], 30);
-//   }
-//   res.json(combined);
-// });
-
-// // Region‑wise history
-// app.get("/api/region/:region/history", (req, res) => {
-//   const region = req.params.region.toLowerCase();
-//   const files = fs.readdirSync(".")
-//     .filter(f => f.startsWith("deviceLogs-") && f.endsWith(".json"));
-//   const regionLogs = {};
-
-//   for (const f of files) {
-//     const dayLogs = JSON.parse(fs.readFileSync(f, "utf8"));
-//     for (const ip of Object.keys(dayLogs)) {
-//       if (ipRegionMap[ip] === region) {
-//         regionLogs[ip] = (regionLogs[ip] || []).concat(dayLogs[ip]);
-//       }
-//     }
-//   }
-
-//   if (!Object.keys(regionLogs).length) {
-//     return res.status(404).json({ message: `No device history found for region: ${region}` });
-//   }
-//   // prune per‑IP
-//   for (const ip of Object.keys(regionLogs)) {
-//     regionLogs[ip] = pruneOldEntries(regionLogs[ip], 30);
-//   }
-//   res.json(regionLogs);
-// });
-
-
-// // Single‑device history
-// app.get("/api/device/history/:ip", (req, res) => {
-//   const ip = req.params.ip;
-//   const files = fs.readdirSync(".")
-//     .filter(f => f.startsWith("deviceLogs-") && f.endsWith(".json"));
-//   let history = [];
-//   for (const f of files) {
-//     const dayLogs = JSON.parse(fs.readFileSync(f, "utf8"));
-//     if (dayLogs[ip]) history = history.concat(dayLogs[ip]);
-//   }
-//   if (!history.length) {
-//     return res.status(404).json({ message: "No history found for this device" });
-//   }
-//   history.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-//   res.json({ ip, history });
-// });
-
-
-
-// // Start Server
-//  const PORT = process.env.PORT || 3000;
-//  app.listen(3000,'0.0.0.0', ()=>{
-
-//   console.log(`Server running on http://0.0.0.0:${PORT}`);
-//     console.log(`Server running on Your LAN at http://10.138.161.4:${PORT}`);
-//   pingDevices();
-//  })
-
-
-
+</html>

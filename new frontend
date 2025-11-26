@@ -1,4 +1,294 @@
+// C:\Projects\backend\src\app.js
+require("dotenv").config();
+const path = require("path");                 // ← REQUIRED (was missing)
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const fs = require("fs");
+//const ping = require("ping");
+const { pingHost } = require("./services/pingService");
+const { DateTime } = require("luxon");
+const regionRoutes = require("./routes/regionRoutes");
+const { fetchAllIpAddress, ipRegionMap } = require("./services/excelService");
+const { getDeviceInfo } = require("./services/excelService");
+//const { sendTeamsAlert }    = require("./services/teamsService");
+
+const app = express();
+
+const HOST = "0.0.0.0";
+
+// ----------------- Safe load of controller JSON -----------------
+let controllerData = [];
+const controllerJsonPath = path.join(__dirname, "data", "ControllerDataWithDoorReader.json");
+
+try {
+  const raw = fs.readFileSync(controllerJsonPath, "utf8");
+  controllerData = raw ? JSON.parse(raw) : [];
+  console.log(`Loaded controller data from: ${controllerJsonPath}`);
+} catch (err) {
+  console.error(`Failed to load controller JSON at ${controllerJsonPath}:`, err.message);
+  controllerData = []; // fallback so server keeps running
+}
+
+// ----------------- Helpers -----------------
+function pruneOldEntries(entries, days = 30) {
+  const cutoff = DateTime.now().minus({ days }).toMillis();
+  return entries.filter(e => DateTime.fromISO(e.timestamp).toMillis() >= cutoff);
+}
+function getLogFileForDate(dt) {
+  return `./deviceLogs-${dt.toISODate()}.json`;
+}
+
+// simple safe JSON reader (used later)
+function safeJsonParse(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, "utf8").trim();
+    if (!content) return {};  // empty file = empty object
+    return JSON.parse(content);
+  } catch (err) {
+    console.error("❌ Corrupted JSON file detected:", filePath);
+    console.error("Error:", err.message);
+    return {};  // fallback so server NEVER crashes
+  }
+}
+
+// ----------------- Middleware -----------------
+app.use(cors());
+app.use(express.json());
+
+app.use(cors({
+  origin: "*",
+  methods: "GET,POST,PUT,DELETE",
+  allowedHeaders: "Content-Type,Authorization"
+}));
+
+app.use(bodyParser.json());
+
+// ----------------- Static front-end serving -----------------
+// NOTE: we resolve frontend path relative to project root (C:\Projects)
+// __dirname here is C:\Projects\backend\src
+const frontendAbsolute = path.resolve(__dirname, "..", "..", "Frontend", "Device Dashboard");
+
+// expose static files at these endpoints
+app.use('/Project/Frontend/Device Dashboard',
+  express.static(frontendAbsolute)
+);
+
+// serve same content at /dashboard
+app.use('/dashboard',
+  express.static(frontendAbsolute)
+);
+
+// fallback to frontend index.html for SPA routes under /Frontend/Device Dashboard/*
+app.get('/Frontend/Device Dashboard/*', (req, res) => {
+  res.sendFile(path.join(frontendAbsolute, 'index.html'));
+});
+
+// ----------------- Health & API routes -----------------
+app.get('/health', (req, res) => {
+  res.json({ status: 'up' });
+});
+
+app.use('/api/regions', regionRoutes);
+
+// ----------------- Device status logic -----------------
+const devices = fetchAllIpAddress();
+let deviceStatus = {};
+
+// Load only today's logs
+const today = DateTime.now().setZone("Asia/Kolkata");
+const todayLogFile = getLogFileForDate(today);
+let todayLogs = fs.existsSync(todayLogFile)
+  ? JSON.parse(fs.readFileSync(todayLogFile, "utf8"))
+  : {};
+
+// Persist today's logs
+function saveTodayLogs() {
+  try {
+    fs.writeFileSync(todayLogFile, JSON.stringify(todayLogs, null, 2));
+  } catch (err) {
+    console.error("Failed to save today's logs:", err.message);
+  }
+}
+
+// Log a status change
+function logDeviceChange(ip, status) {
+  const timestamp = DateTime.now().setZone("Asia/Kolkata").toISO();
+  const arr = (todayLogs[ip] = todayLogs[ip] || []);
+  const last = arr[arr.length - 1];
+  if (!last || last.status !== status) {
+    arr.push({ status, timestamp });
+    todayLogs[ip] = pruneOldEntries(arr, 30);
+    saveTodayLogs();
+  }
+}
+
+// Ping devices
+async function pingDevices() {
+  const limit = require("p-limit")(20);
+  await Promise.all(
+    devices.map(ip =>
+      limit(async () => {
+        const newStatus = await pingHost(ip);
+        if (deviceStatus[ip] !== newStatus) {
+          logDeviceChange(ip, newStatus);
+        }
+        deviceStatus[ip] = newStatus;
+      })
+    )
+  );
+  buildControllerStatus();
+  console.log("Updated device status:", deviceStatus);
+}
+
+// Controller status builder
+let fullStatus = [];
+function buildControllerStatus() {
+  fullStatus = controllerData.map(controller => {
+    const ip = controller.IP_address ? controller.IP_address.trim() : "";
+    const status = deviceStatus[ip] || "Unknown";
+
+    // If controller offline, mark all doors offline too
+    const doors = Array.isArray(controller.Doors) ? controller.Doors.map(d => ({
+      ...d,
+      status: status === "Online" ? "Online" : "Offline",
+    })) : [];
+
+    return {
+      controllername: controller.controllername,
+      IP_address: ip,
+      Location: controller.Location || "Unknown",
+      City: controller.City || "Unknown",
+      controllerStatus: status,
+      Doors: doors,
+    };
+  });
+}
+
+const notifiedOffline = new Set();
+
+setInterval(async () => {
+  pingDevices();
+  // await checkNotifications();
+}, 60_000);
+
+// initial run
+(async () => {
+  await pingDevices();
+  // await checkNotifications();
+})();
+
+// Start ping loop (kept your numeric literal; equals 120000 ms)
+setInterval(pingDevices, 12_0000);
+pingDevices();
+
+// ----------------- API endpoints -----------------
+app.get("/api/region/devices/status", (req, res) => {
+  res.json(deviceStatus);
+});
+
+// Full history: stitch together all daily files
+app.get("/api/devices/history", (req, res) => {
+  const files = fs.readdirSync(".")
+    .filter(f => f.startsWith("deviceLogs-") && f.endsWith(".json"));
+  const combined = {};
+  for (const f of files) {
+    const dayLogs = safeJsonParse(f);
+    for (const ip of Object.keys(dayLogs)) {
+      combined[ip] = (combined[ip] || []).concat(dayLogs[ip]);
+    }
+  }
+  // prune to last 30 days
+  for (const ip of Object.keys(combined)) {
+    combined[ip] = pruneOldEntries(combined[ip], 30);
+  }
+  res.json(combined);
+});
+
+// Region-wise history
+app.get("/api/region/:region/history", (req, res) => {
+  const region = req.params.region.toLowerCase();
+  const files = fs.readdirSync(".")
+    .filter(f => f.startsWith("deviceLogs-") && f.endsWith(".json"));
+  const regionLogs = {};
+
+  for (const f of files) {
+    const dayLogs = safeJsonParse(f);
+    for (const ip of Object.keys(dayLogs)) {
+      if (ipRegionMap[ip] === region) {
+        regionLogs[ip] = (regionLogs[ip] || []).concat(dayLogs[ip]);
+      }
+    }
+  }
+
+  if (!Object.keys(regionLogs).length) {
+    return res.status(404).json({ message: `No device history found for region: ${region}` });
+  }
+  // prune per-IP
+  for (const ip of Object.keys(regionLogs)) {
+    regionLogs[ip] = pruneOldEntries(regionLogs[ip], 30);
+  }
+  res.json(regionLogs);
+});
+
+// Single-device history
+app.get("/api/device/history/:ip", (req, res) => {
+  const ip = req.params.ip;
+  const files = fs.readdirSync(".")
+    .filter(f => f.startsWith("deviceLogs-") && f.endsWith(".json"));
+  let history = [];
+  for (const f of files) {
+    const dayLogs = safeJsonParse(f);
+    if (dayLogs[ip]) history = history.concat(dayLogs[ip]);
+  }
+  if (!history.length) {
+    return res.status(404).json({ message: "No history found for this device" });
+  }
+  history.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  res.json({ ip, history });
+});
+
+// Get all controller + door statuses
+app.get("/api/controllers/status", (req, res) => {
+  res.json(fullStatus);
+});
+
+// ----------------- Start Server -----------------
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST}:${PORT}`);
+  // optional LAN IP log (keep if you want)
+  // console.log(`Server running on Your LAN at http://10.138.161.4:${PORT}`);
+  pingDevices();
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 check below file carefully and fix Path issue 
+
+
 Check correct path and fix the error 
 
 C:\Projects\Backend\src\data\ControllerDataWithDoorReader.json

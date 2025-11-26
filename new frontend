@@ -1,512 +1,618 @@
-C:\Users\W0024618\Desktop\NewFrontend\Device Dashboard\newcss.css
-
-/* Theme Variables */
-:root {
-  /* Dark Theme (Default) */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-card: #1a1d29;
-  --text-primary: #FFF;
-  /* --text-secondary: #94a3b8; */
-  --text-secondary: #fdfeff;
-  --text-accent: #7c3aed;
-  --border-color: #334155;
-  --shadow: rgba(0, 0, 0, 0.3);
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --chart-bg: #0a0a0a;
-}
-
-.theme-light {
-  /* Light Theme */
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-card: #ffffff;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-accent: #7c3aed;
-  --border-color: #e2e8f0;
-  --shadow: rgba(0, 0, 0, 0.1);
-  --success: #059669;
-  --warning: #d97706;
-  --danger: #dc2626;
-  --chart-bg: #f1f5f9;
-}
-
-/* Base Styles */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: 'Poppins', sans-serif;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  transition: all 0.3s ease;
-  min-height: 100vh;
-}
-
-/* Default = Dark Theme */
-#region-title {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 70px;
-
-  background: var(--bg-secondary);
-  /* Dark background */
-  color: var(--text-primary);
-  /* Text color */
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-
-  padding: 24px;
-  font-size: 35px;
-  font-family: "PP Right Grotesk";
-  font-weight: 600;
-
-  border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 4px 10px var(--shadow);
-  transition: all 0.3s ease;
-}
-
-
-body.theme-light #region-title {
-  background: var(--bg-secondary);
-  /* Light background */
-  color: var(--text-primary);
-  /* Dark text */
-
-  border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 2px 6px var(--shadow);
-}
-
-body.theme-light #region-title span {
-  color: var(--text-primary);
-}
-
-body.theme-light #region-title .region-logo a {
-  color: var(--text-accent);
-}
+C:\Users\W0024618\Desktop\NewFrontend\Device Dashboard\graph.js
 
 
 
+// function updateGauge(id, activeId, inactiveId, totalId) {
+//   const active = parseInt(document.getElementById(activeId).textContent) || 0;
+//   const inactive = parseInt(document.getElementById(inactiveId).textContent) || 0;
+//   const total = active + inactive;
 
-/* Tooltip container */
-.tooltip .tooltiptext {
-  visibility: hidden;
-  opacity: 0;
-  width: 140px;
-  background: var(--bg-secondary);
-  /* Dark background */
-  color: var(--text-primary);
-  /* Text color */
-  text-align: center;
-  padding: 6px;
-  position: absolute;
-  top: 150%;
-  /* position above icon */
-  left: 70%;
-  transform: translateX(-50%);
-  /* transition: opacity 0.3s; */
-  z-index: 10001;
-  font-size: 14px;
-  font-style: normal;
-  font-family: 'Times New Roman', Times, serif;
-}
+//   // element
+//   const gauge = document.getElementById(id);
+//   if (!gauge) return;
 
-/* Show tooltip on hover */
-.tooltip:hover .tooltiptext {
-  visibility: visible;
-  opacity: 1;
-}
+//   // % calculation
+//   let percentage = total === 0 ? 0 : Math.round((active / total) * 100);
 
-/* Layout */
-/* .container {
-  display: flex;
-  min-height: 100vh;
-} */
+//   // set values
+//   gauge.style.setProperty("--percentage", percentage);
 
-/* Sidebar Styles */
-.sidebar-toggle {
-  position: fixed;
-  top: 15px;
-  left: 10px;
-  z-index: 1001;
-  background: var(--text-accent);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 4px 12px var(--shadow);
-  transition: all 0.3s ease;
-}
+//   // update text inside semicircle
+//   gauge.querySelector(".total").textContent = total;
+//   gauge.querySelector(".active").textContent = active;
+//   gauge.querySelector(".inactive").textContent = inactive;
 
-.sidebar-toggle:hover {
-  transform: scale(1.05);
-}
+//   // card footer also updates
+//   document.getElementById(totalId).textContent = total;
+// }
 
-#sidebar {
-  position: fixed;
-  top: 0;
-  left: -320px;
-  width: 300px;
-  height: 100vh;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  padding: 20px;
-  overflow-y: auto;
-  transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 4px 0 20px var(--shadow);
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+function updateGauge(id, activeId, inactiveId, totalId) {
+  // read elements safely (avoid exception if missing)
+  const activeEl = document.getElementById(activeId);
+  const inactiveEl = document.getElementById(inactiveId);
 
-#sidebar.active {
-  left: 0;
-}
+  const active = activeEl ? parseInt((activeEl.textContent || '0').replace(/,/g, ''), 10) || 0 : 0;
+  const inactive = inactiveEl ? parseInt((inactiveEl.textContent || '0').replace(/,/g, ''), 10) || 0 : 0;
+  const total = active + inactive;
 
-.sidebar-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 999;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s, visibility 0.3s;
-}
+  // element (gauge card)
+  const gauge = document.getElementById(id);
+  if (!gauge) return;
 
-.sidebar-overlay.active {
-  opacity: 1;
-  visibility: visible;
-}
+  // % calculation (safe)
+  let percentage = total === 0 ? 0 : Math.round((active / total) * 100);
 
-/* Main Content */
-#content {
-  margin-top: 35px;
-  flex: 1;
-  padding: 10px 5px;
-  transition: margin-left 0.3s ease;
-  margin-left: 0;
-}
-
-#sidebar.active~#content {
-  margin-left: 300px;
-}
-
-/* Details Section */
-.details-section {
-  background: var(--bg-secondary);
-  border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 4px 20px var(--shadow);
-  border: 1px solid var(--border-color);
-}
-
-.details-header {
-  display: flex;
-  justify-content: between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.details-header h2 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-accent);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.details-header h2 i {
-  font-size: 1.3rem;
-}
-
-#device-search {
-  flex: 1;
-  min-width: 250px;
-  padding: 12px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-family: 'Poppins', sans-serif;
-  font-size: 0.95rem;
-  transition: all 0.3s ease;
-}
-
-#device-search:focus {
-  outline: none;
-  border-color: var(--text-accent);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-}
-
-#device-search::placeholder {
-  color: var(--text-secondary);
-}
-
-.device-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-  margin-top: 16px;
-}
-
-
-
-
-/* Theme Toggle */
-.theme-toggle {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 1001;
-  background: var(--text-accent);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 4px 12px var(--shadow);
-  transition: all 0.3s ease;
-}
-
-.theme-toggle:hover {
-  transform: scale(1.05);
-}
-
-/* Responsive Design */
-@media (max-width: 1200px) {
-  .graphs-grid.dashboard-layout {
-    grid-template-columns: 1fr;
+  // set CSS variable if supported
+  try {
+    gauge.style.setProperty("--percentage", percentage);
+  } catch (e) {
+    // ignore if style can't be set
   }
 
- 
+  // update text inside semicircle (if those elements exist)
+  const totalLabel = gauge.querySelector(".total");
+  const activeLabel = gauge.querySelector(".active");
+  const inactiveLabel = gauge.querySelector(".inactive");
+
+  if (totalLabel) totalLabel.textContent = total;
+  if (activeLabel) activeLabel.textContent = active;
+  if (inactiveLabel) inactiveLabel.textContent = inactive;
+
+  // card footer also updates (if exists)
+  const footerEl = document.getElementById(totalId);
+  if (footerEl) footerEl.textContent = total;
 }
 
-@media (max-width: 768px) {
-  #sidebar {
-    width: 280px;
-    left: -280px;
+
+function renderGauges() {
+  updateGauge("gauge-cameras", "camera-online", "camera-offline", "camera-total");
+  updateGauge("gauge-archivers", "archiver-online", "archiver-offline", "archiver-total");
+  updateGauge("gauge-controllers", "controller-online", "controller-offline", "controller-total");
+  updateGauge("gauge-ccure", "server-online", "server-offline", "server-total");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderGauges();
+  setInterval(renderGauges, 6000);
+});
+
+
+
+
+
+// ⬇️⬇️⬇️⬇️⬇️⬇️ PIE chart
+
+// --- Total Count doughnut chart (uses Chart.js) ---
+
+let _totalCountChart = null;
+
+/**
+ * Find the chart-placeholder element inside the card whose title matches text.
+ * Returns the placeholder element or null.
+ */
+function findChartPlaceholderByTitle(titleText) {
+  const cards = document.querySelectorAll('.totacl-gcard.wide');
+  for (let card of cards) {
+    const h = card.querySelector('.gcard-title');
+    if (h && h.textContent.trim().toLowerCase() === titleText.trim().toLowerCase()) {
+      return card.querySelector('.chart-placeholder');
+    }
+  }
+  return null;
+}
+
+/**
+ * Collect totals from DOM. Add/remove device keys as needed.
+ * Make sure IDs used here exist in your summary-section.
+ */
+
+
+function collectTotalCounts() {
+  const keys = [
+    { id: 'camera-total', label: 'Cameras' },
+    { id: 'archiver-total', label: 'Archivers' },
+    { id: 'controller-total', label: 'Controllers' },
+    { id: 'server-total', label: 'CCURE' },
+    { id: 'doorReader-total', label: 'Doors' },
+    { id: 'reader-total-inline', label: 'Readers' },
+    { id: 'pc-total', label: 'Desktop' },
+    { id: 'db-total', label: 'DB Server' }
+  ];
+
+  const labels = [];
+  const values = [];
+
+  keys.forEach(k => {
+    const el = document.getElementById(k.id);
+    const v = el
+      ? parseInt((el.textContent || '0').replace(/,/g, '').trim(), 10)
+      : 0;
+
+    if (v > 0) {
+      labels.push(k.label);
+      values.push(v);
+    }
+  });
+
+  if (values.length === 0) {
+    return { labels: ['No devices'], values: [0] };  // ✅ fixed
   }
 
-  #sidebar.active~#content {
-    margin-left: 0;
+  return { labels, values };
+}
+
+/**
+ * Render or update the Total Count doughnut.
+ */
+
+
+
+function renderTotalCountChart() {
+  if (typeof Chart === 'undefined') {
+    console.warn('Chart.js not loaded — add https://cdn.jsdelivr.net/npm/chart.js');
+    return;
   }
 
-  .sidebar-toggle {
-    top: 20px;
-    left: 15px;
-    width: 45px;
-    height: 45px;
+  const placeholder = findChartPlaceholderByTitle('Total Count');
+  if (!placeholder) return;
+
+  let canvas = placeholder.querySelector('canvas');
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    placeholder.innerHTML = '';
+    placeholder.appendChild(canvas);
   }
 
-  .details-header {
-    flex-direction: column;
-    align-items: stretch;
+  const ctx = canvas.getContext('2d');
+  const data = collectTotalCounts();
+
+  // calculate total
+  //   const totalValue = data.values.reduce((a, b) => a + b, 0);
+  const totalValue = data.labels[0] === 'No devices'
+    ? 0
+    : data.values.reduce((a, b) => a + b, 0);
+
+  if (_totalCountChart) {
+    _totalCountChart.destroy();
   }
 
-  #device-search {
-    min-width: 100%;
+  const palette = [
+    '#10b981', '#f97316', '#2563eb',
+    '#7c3aed', '#06b6d4', '#ef4444',
+    '#f59e0b', '#94a3b8'
+  ];
+
+
+
+  // ---- Plugin for CENTER TEXT ----
+
+  const centerTextPlugin = {
+    id: 'centerText',
+    afterDatasetsDraw(chart) {   // ✅ better than afterDraw
+      const { ctx, chartArea, data } = chart;
+
+      if (!chartArea) return;    // ✅ prevents crash on first render
+
+      const centerX = (chartArea.left + chartArea.right) / 2;
+      const centerY = (chartArea.top + chartArea.bottom) / 2;
+
+      // ✅ fresh total calculation every time
+      const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // ✅ Safe color fallback
+      const labelColor = getComputedStyle(document.body)
+        .getPropertyValue('--graph-card-footer-dark')
+        .trim() || "#888";  // fallback gray
+
+      const valueColor = getComputedStyle(document.body)
+        .getPropertyValue('--graph-card-title-dark')
+        .trim() || "#ffffff"; // fallback white
+
+      // TOTAL label
+      ctx.font = "14px Arial";
+      ctx.fillStyle = labelColor;
+      ctx.fillText("TOTAL", centerX, centerY - 20);
+
+      // TOTAL value
+      ctx.font = "bold 22px Arial";
+      ctx.fillStyle = valueColor;
+      ctx.fillText(total.toString(), centerX, centerY + 15);
+
+      ctx.restore();
+    }
+  };
+
+  _totalCountChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        data: data.values,
+        backgroundColor: palette.slice(0, data.values.length),
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '45%',
+      radius: '90%',  // ✅ shrink only circle size
+      plugins: {
+        legend: {
+          position: 'right',
+
+          labels: {
+            usePointStyle: true,
+            padding: 12,
+            color: getComputedStyle(document.body)
+              .getPropertyValue('--graph-card-title-dark'),
+
+            generateLabels: function (chart) {
+              const dataset = chart.data.datasets[0];
+              const labels = chart.data.labels;
+              const colors = dataset.backgroundColor;
+
+              return labels.map((label, i) => ({
+                text: `${label} - ${dataset.data[i]}`,
+                fillStyle: colors[i],
+                strokeStyle: colors[i],
+                fontColor: getComputedStyle(document.body)
+                  .getPropertyValue('--graph-card-title-dark'),
+                hidden: false,
+                index: i
+              }));
+            }
+          }
+
+        },
+
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              const label = ctx.label || '';
+              const value = ctx.parsed || 0;
+              return `${label} : ${value}`;
+            }
+          }
+        }
+      }
+    },
+
+    plugins: [centerTextPlugin]   // ✅ center total plugin
+  });
+}
+
+
+
+
+/**
+ * Update the Total Count chart data in-place (if chart exists) otherwise render
+ */
+function updateTotalCountChart() {
+  if (!_totalCountChart) {
+    renderTotalCountChart();
+    return;
+  }
+  const data = collectTotalCounts();
+  _totalCountChart.data.labels = data.labels;
+  _totalCountChart.data.datasets[0].data = data.values;
+  _totalCountChart.data.datasets[0].backgroundColor = [
+
+    '#10b981', '#f97316', '#2563eb', '#7c3aed', '#06b6d4', '#ef4444', '#f59e0b', '#94a3b8'
+  ].slice(0, data.values.length);
+  _totalCountChart.update();
+}
+
+// Hook it up: render on DOMContentLoaded and update when gauges refresh
+document.addEventListener('DOMContentLoaded', () => {
+  // initial render (if Chart.js loaded)
+  renderTotalCountChart();
+
+  // re-render on window resize (debounced)
+  let resizeTO;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTO);
+    resizeTO = setTimeout(() => {
+      renderTotalCountChart(); // re-create with correct sizing
+    }, 10);
+  });
+});
+
+// Call updateTotalCountChart() whenever your data changes.
+// We'll call it inside renderGauges() so it updates after gauges refresh.
+function renderGauges() {
+  updateGauge("gauge-cameras", "camera-online", "camera-offline", "camera-total");
+  updateGauge("gauge-archivers", "archiver-online", "archiver-offline", "archiver-total");
+  updateGauge("gauge-controllers", "controller-online", "controller-offline", "controller-total");
+  updateGauge("gauge-ccure", "server-online", "server-offline", "server-total");
+
+  // ✅ ADD THESE TWO
+  updateGauge("gauge-doors", "door-online", "door-offline", "doorReader-total");
+  updateGauge("gauge-readers", "reader-online", "reader-offline", "reader-total-inline");
+
+  updateTotalCountChart();
+  // update Total Count pie
+}
+
+// ☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️☝️
+
+
+// ========== GLOBALS ==========
+let offlineChart;
+let cityIndexMap = {};
+let cityCounter = 0;
+let dynamicTypeIndexMap = {};
+let dynamicTypeList = [];
+
+// ========== GET CHART COLORS BASED ON THEME ==========
+function getChartColors() {
+  const isLightTheme = document.body.classList.contains('theme-light');
+
+  if (isLightTheme) {
+    return {
+      backgroundColor: '#0a0a0a',
+      text: '#e6eef7', // Visible text color
+    };
+  } else {
+    // Dark theme colors - fixed for visibility
+    return {
+      camera: '#ff4d4d',
+      archiver: '#4da6ff',
+      controller: '#ffaa00',
+      ccure: '#7d3cff',
+      grid: 'rgba(255, 255, 255, 0.2)', // Visible grid lines
+      text: '#e6eef7', // Visible text color
+      background: '#0a0a0a'
+    };
+  }
+}
+
+// ========== UPDATE CHART THEME ==========
+function updateChartTheme() {
+  if (!offlineChart) return;
+
+  const colors = getChartColors();
+
+  // Update grid lines and borders
+  offlineChart.options.scales.x.grid.color = colors.grid;
+  offlineChart.options.scales.y.grid.color = colors.grid;
+
+  // Update text colors
+  offlineChart.options.scales.x.ticks.color = colors.text;
+  offlineChart.options.scales.y.ticks.color = colors.text;
+
+  // Update legend text color
+  if (offlineChart.options.plugins.legend) {
+    offlineChart.options.plugins.legend.labels.color = colors.text;
   }
 
-  .graphs-grid.dashboard-layout {
-    gap: 16px;
+  offlineChart.update();
+}
+
+// ========== INIT CHART ==========
+function initOfflineChart() {
+  const canvas = document.getElementById("DotOfflineDevice");
+  const ctx = canvas.getContext("2d");
+
+  const colors = getChartColors();
+
+  offlineChart = new Chart(ctx, {
+    type: "scatter",
+    data: {
+      datasets: [
+        {
+          label: "Camera",
+          data: [],
+          backgroundColor: colors.camera,
+          pointStyle: "circle",
+          pointRadius: 6
+        },
+        {
+          label: "Archiver",
+          data: [],
+          backgroundColor: colors.archiver,
+          pointStyle: "rect",
+          pointRadius: 6
+        },
+        {
+          label: "Controller",
+          data: [],
+          backgroundColor: colors.controller,
+          pointStyle: "triangle",
+          pointRadius: 7
+        },
+        {
+          label: "CCURE",
+          data: [],
+          backgroundColor: colors.ccure,
+          pointStyle: "rectRot",
+          pointRadius: 6
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            color: colors.text, // Set legend text color
+            font: {
+              size: 12
+            },
+            usePointStyle: true
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const d = ctx.raw;
+              const lines = [];
+              if (d.ip) lines.push(`IP: ${d.ip}`);
+              if (d.city) lines.push(`City: ${d.city}`);
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: {
+            display: false,
+            text: "City"
+          },
+          grid: {
+            color: colors.grid, // Set grid line color
+            drawBorder: true
+          },
+          ticks: {
+            color: colors.text, // Set x-axis text color
+            maxRotation: 0,
+            minRotation: 0,
+            callback: (value) => {
+              return Object.keys(cityIndexMap).find(
+                key => cityIndexMap[key] === value
+              ) || "";
+            }
+          }
+        },
+        y: {
+          title: {
+            display: false,
+            text: "Device Type"
+          },
+          grid: {
+            color: colors.grid, // Set grid line color
+            drawBorder: true
+          },
+          ticks: {
+            color: colors.text, // Set y-axis text color
+            callback: v => dynamicTypeList[v] || ""
+          },
+          min: -0.5,
+          max: () => Math.max(dynamicTypeList.length - 0.5, 0.5)
+        }
+      }
+    }
+  });
+}
+
+// ========== UPDATE CHART ==========
+function updateOfflineChart(offlineDevices) {
+  const typeNames = {
+    cameras: "Camera",
+    archivers: "Archiver",
+    controllers: "Controller",
+    servers: "CCURE"
+  };
+
+  // Reset mappings
+  dynamicTypeList = [];
+  dynamicTypeIndexMap = {};
+  cityIndexMap = {};
+  cityCounter = 0;
+
+  // Only valid types
+  const filtered = offlineDevices.filter(dev =>
+    typeNames.hasOwnProperty(dev.type)
+  );
+
+  // Build dynamic Y indexes
+  filtered.forEach(dev => {
+    const label = typeNames[dev.type];
+    if (!(label in dynamicTypeIndexMap)) {
+      dynamicTypeIndexMap[label] = dynamicTypeList.length;
+      dynamicTypeList.push(label);
+    }
+  });
+
+  // Clear all old points
+  offlineChart.data.datasets.forEach(ds => ds.data = []);
+
+  // Add points
+  filtered.forEach(dev => {
+    const source = dev.device ? dev.device : dev;
+    const deviceIP = source.ip || null;
+    const city = source.city || "Unknown";
+
+    if (!cityIndexMap[city]) {
+      cityCounter++;
+      cityIndexMap[city] = cityCounter;
+    }
+
+    const label = typeNames[dev.type];
+    const dynamicY = dynamicTypeIndexMap[label];
+
+    const point = {
+      x: cityIndexMap[city],
+      y: dynamicY,
+      ip: deviceIP,
+      city: city
+    };
+
+    const dataset = offlineChart.data.datasets.find(
+      ds => ds.label === label
+    );
+
+    if (dataset) {
+      dataset.data.push(point);
+    }
+  });
+
+  // Hide empty types
+  offlineChart.data.datasets.forEach(ds => {
+    ds.hidden = ds.data.length === 0;
+  });
+
+  offlineChart.update();
+}
+
+// ========== THEME CHANGE DETECTION ==========
+function setupThemeObserver() {
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.attributeName === 'class') {
+        setTimeout(updateChartTheme, 100);
+      }
+    });
+  });
+
+  observer.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['class']
+  });
+}
+
+// ========== INITIALIZE EVERYTHING ==========
+function initializeChartSystem() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      initOfflineChart();
+      setupThemeObserver();
+    });
+  } else {
+    initOfflineChart();
+    setupThemeObserver();
   }
-
 }
 
-@media (max-width: 480px) {
-  #content {
-    padding: 15px;
-  }
+// Initialize the chart system
+initializeChartSystem();
 
-  .device-grid {
-    grid-template-columns: 1fr;
-  }
+// ========== YOUR EXISTING FUNCTION ==========
+function renderOfflineChartFromCombined(combinedDevices) {
+  const offlineDevices = combinedDevices
+    .filter(d => d.device.status === "offline")
+    .map(d => ({
+      device: d.device,
+      type: d.device.type
+    }));
+
+  updateOfflineChart(offlineDevices);
 }
 
-
-/* /////////////////////////////////// */
-/* /////////////////////////////////// */
-
-
-
-/* ============================= */
-/*  Device Card – Theme Aware   */
-/* ============================= */
-
-.device-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 18px;
-  box-shadow: 0 6px 16px var(--shadow);
-  transition: all 0.3s ease;
-  color: var(--text-primary);
-}
-
-/* Hover effect */
-.device-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 28px var(--shadow);
-}
-
-/* Online / Offline indicator */
-.device-card[data-status="online"] {
-  border-left: 6px solid var(--success);
-}
-
-.device-card[data-status="offline"] {
-  border-left: 6px solid var(--danger);
-}
-
-/* ============================= */
-/*  Text Section                 */
-/* ============================= */
-
-.device-name {
-  font-size: 20px;
-  font-weight: 500;
-  margin-bottom: 10px;
-  color: var(--text-primary);
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 6px;
-}
-
-.device-type-label {
-  font-size: 17px;
-  /* color: var(--text-secondary); */
-}
-
-.device-card p {
-  /* color: var(--text-secondary); */
-  font-size: 14px;
-}
-
-/* ============================= */
-/*  IP Styling                   */
-/* ============================= */
-
-.device-ip {
-  color: var(--text-accent);
-  cursor: pointer;
-  font-weight: 500;
-  transition: color 0.2s ease, text-shadow 0.2s ease;
-}
-
-.device-ip:hover {
-  color: var(--text-accent);
-  text-shadow: 0 0 6px rgba(124, 58, 237, 0.5);
-}
-
-/* ============================= */
-/* Icon Colors (Theme Based) */
-/* ============================= */
-
-.device-card i {
-  color: var(--text-accent);
-  opacity: 0.9;
-}
-
-.device-type-label.controllers i {
-  color: #a855f7;
-}
-
-.device-type-label.cameras i {
-  color: #3b82f6;
-}
-
-.device-type-label.archivers i {
-  color: #f59e0b;
-}
-
-.device-type-label.servers i {
-  color: #22c55e;
-}
-
-/* ============================= */
-/* Status Text */
-/* ============================= */
-
-.device-status {
-  margin-top: 12px;
-  font-size: 14px;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-}
-
-/* Status dots */
-.online-dot {
-  background: var(--success);
-}
-
-.offline-dot {
-  background: var(--danger);
-}
-
-.online-dot,
-.offline-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-right: 8px;
-}
-
-/* ============================= */
-/* Light Theme Specific Tweaks  */
-/* ============================= */
-
-body.theme-light .device-card {
-  background: var(--bg-secondary);
-  box-shadow: 0 3px 10px var(--shadow);
-}
-
-body.theme-light .device-name {
-  color: var(--text-primary);
-}
-
-body.theme-light .device-card p {
-  /* color: var(--text-secondary); */
-}
-
-body.theme-light .device-ip {
-  color: #2563eb;
-}
-
-/* ============================= */
-/* Dark Theme Specific Tweaks   */
-/* ============================= */
-
-body:not(.theme-light) .device-card {
-  background: var(--bg-card);
-}
-
-body:not(.theme-light) .device-ip {
-  color: #22d3ee;
-}
